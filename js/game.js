@@ -21,6 +21,7 @@
   const pmRestart = document.getElementById("pm-restart");
   const pmSound = document.getElementById("pm-sound");
   const pmQuit = document.getElementById("pm-quit");
+  const fireBtn = document.getElementById("firebtn");
 
   let glOk = false;
   try {
@@ -103,7 +104,10 @@
   let chBonus = 0;
 
   const keys = { left: false, right: false };
-  let dragging = false;
+  let movePointerId = null; // the touch that steers the ship
+  let moveStartX = 0;
+  let moveStartTarget = 0;
+  const DRAG_SENS = 1.5;    // ship px per finger px (relative drag)
   let fireHeld = false;
   let fireCd = 0;
 
@@ -1092,9 +1096,10 @@
       for (let i = 0; i < Math.max(0, lives - 1); i++) {
         Sprites.player(18 + i * 26, H() - 20, 0.62, 0);
       }
+      // Flags sit left of the FIRE button.
       const flags = Math.min(stage, 8);
       for (let i = 0; i < flags; i++) {
-        Sprites.flag(W() - 14 - i * 16, H() - 20, 1);
+        Sprites.flag(W() - 104 - i * 16, H() - 20, 1);
       }
     }
 
@@ -1167,34 +1172,55 @@
     return false;
   }
 
+  // Movement: relative drag anywhere on the canvas (the finger doesn't have
+  // to sit on the ship). One pointer steers; firing is the FIRE button's job,
+  // so a second thumb can hold fire simultaneously.
   canvas.addEventListener("pointerdown", function (e) {
     e.preventDefault();
     GameAudio.unlock();
     if (paused) return;
     if (startFromUI()) return;
-    if (playableInput()) {
-      dragging = true;
-      fireHeld = true;
-      fireCd = 0.22;
-      player.targetX = e.clientX;
-      fireMissile();
+    if (playableInput() && movePointerId === null) {
+      movePointerId = e.pointerId;
+      moveStartX = e.clientX;
+      moveStartTarget = player.targetX;
       try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ok */ }
     }
   });
 
   canvas.addEventListener("pointermove", function (e) {
-    if (dragging) {
+    if (e.pointerId === movePointerId) {
       e.preventDefault();
-      player.targetX = e.clientX;
+      player.targetX = moveStartTarget + (e.clientX - moveStartX) * DRAG_SENS;
     }
   });
 
-  function endPointer() {
-    dragging = false;
-    fireHeld = false;
+  function endPointer(e) {
+    if (movePointerId === null || e.pointerId === movePointerId) {
+      movePointerId = null;
+    }
   }
   canvas.addEventListener("pointerup", endPointer);
   canvas.addEventListener("pointercancel", endPointer);
+
+  // FIRE button: tap fires, hold autofires; independent of the move pointer.
+  fireBtn.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    GameAudio.unlock();
+    if (paused) return;
+    fireHeld = true;
+    fireCd = 0.22;
+    fireMissile();
+    try { fireBtn.setPointerCapture(e.pointerId); } catch (err) { /* ok */ }
+  });
+
+  function endFire(e) {
+    if (e) e.preventDefault();
+    fireHeld = false;
+  }
+  fireBtn.addEventListener("pointerup", endFire);
+  fireBtn.addEventListener("pointercancel", endFire);
+  fireBtn.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 
   window.addEventListener("keydown", function (e) {
     GameAudio.unlock();
@@ -1254,6 +1280,7 @@
     if (showPause !== pauseBtnShown) {
       pauseBtnShown = showPause;
       pauseBtn.hidden = !showPause;
+      fireBtn.hidden = !showPause;
     }
     requestAnimationFrame(frame);
   }

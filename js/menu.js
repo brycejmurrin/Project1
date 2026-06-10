@@ -307,7 +307,7 @@ const Menu = (function () {
     // 7. Footer
     const footer = document.createElement("div");
     footer.className = "nsm-footer";
-    footer.textContent = "DRAG TO MOVE · TAP TO FIRE";
+    footer.textContent = "DRAG TO MOVE · HOLD FIRE TO SHOOT";
     container.appendChild(footer);
 
     document.body.appendChild(container);
