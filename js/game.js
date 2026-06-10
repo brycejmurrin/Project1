@@ -110,6 +110,7 @@
   let moveStartTarget = 0;
   let fireHeld = false;
   let fireCd = 0;
+  const FIRE_INTERVAL = 0.17; // seconds between autofire shots
 
   // Touch drag sensitivity (ship px per finger px), selectable in the menu.
   const SENS_KEY = "touch-sens";
@@ -623,7 +624,7 @@
       fireCd -= dt;
       if (fireCd <= 0) {
         fireMissile();
-        fireCd = 0.22;
+        fireCd = FIRE_INTERVAL;
       }
     }
   }
@@ -1266,7 +1267,7 @@
     GameAudio.unlock();
     if (paused) return;
     fireHeld = true;
-    fireCd = 0.22;
+    fireCd = FIRE_INTERVAL;
     fireMissile();
     try { fireBtn.setPointerCapture(e.pointerId); } catch (err) { /* ok */ }
   });
@@ -1292,7 +1293,7 @@
       if (!startFromUI() && e.code === "Space") {
         if (!fireHeld) fireMissile();
         fireHeld = true;
-        fireCd = 0.22;
+        fireCd = FIRE_INTERVAL;
       }
       e.preventDefault();
     }
