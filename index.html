@@ -15,7 +15,7 @@
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<canvas id="game"></canvas>
+<canvas id="game">Your browser does not support the canvas element.</canvas>
 
 <div id="hud">
   <div class="hud-col">
@@ -59,6 +59,7 @@
   <p>Sorry &mdash; your browser does not support WebGL.</p>
 </div>
 
+<!-- Scripts placed at end of body to ensure DOM elements exist -->
 <script src="js/renderer.js"></script>
 <script src="js/paths.js"></script>
 <script src="js/sprites.js"></script>
