@@ -18,6 +18,9 @@ const GameAudio = (function () {
   // Tractor beam loop state.
   let tractor = null;
 
+  // Background music state (null when not playing).
+  let music = null;
+
   // ---------------------------------------------------------------------
   // Setup
   // ---------------------------------------------------------------------
@@ -337,6 +340,188 @@ const GameAudio = (function () {
       }
     } catch (e) {
       /* nodes may already be stopped */
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Background music loop
+  //
+  // An original 8-bar chip-tune loop in A minor at ~112 BPM:
+  //   Am | F | C | G | Am | F | Dm | E
+  // Three quiet voices: a triangle bass on the chord roots (beats 1 & 3),
+  // a sparse square-wave 16th-note broken-chord arpeggio on top, and a
+  // very short filtered-noise tick on the off-beats (2 & 4). Everything
+  // runs through its own bus gain (~0.07) into master, so setMuted still
+  // silences it. Notes are produced by a lookahead scheduler: a ~100ms
+  // setInterval that schedules ~300ms ahead of ctx.currentTime.
+  // ---------------------------------------------------------------------
+
+  const MUSIC_GAIN = 0.07; // music bus level into master
+  const MUSIC_STEP = 60 / 112 / 4; // one 16th note at 112 BPM (~0.134s)
+  const MUSIC_TOTAL_STEPS = 8 * 16; // 8 bars of 16 sixteenths
+  const MUSIC_LOOKAHEAD = 0.3; // seconds scheduled ahead
+  const MUSIC_TICK_MS = 100; // scheduler wakeup interval
+
+  // Per-bar chord table: bass root (midi) + four arpeggio tones (midi).
+  const MUSIC_CHORDS = [
+    { bass: 45, arp: [69, 72, 76, 81] }, // Am  (A4 C5 E5 A5)
+    { bass: 41, arp: [65, 69, 72, 77] }, // F   (F4 A4 C5 F5)
+    { bass: 48, arp: [64, 67, 72, 76] }, // C   (E4 G4 C5 E5)
+    { bass: 43, arp: [67, 71, 74, 79] }, // G   (G4 B4 D5 G5)
+    { bass: 45, arp: [69, 72, 76, 81] }, // Am
+    { bass: 41, arp: [65, 69, 72, 77] }, // F
+    { bass: 50, arp: [65, 69, 74, 77] }, // Dm  (F4 A4 D5 F5)
+    { bass: 40, arp: [64, 68, 71, 76] }, // E   (E4 G#4 B4 E5)
+  ];
+
+  // Which 16ths of each bar the arpeggio plays (sparse, lightly syncopated).
+  const MUSIC_ARP_MASK = [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0];
+
+  // One oscillator note on the music bus, scheduled at absolute time `at`.
+  function musicVoice(type, freq, at, dur, peak) {
+    const osc = ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.setValueAtTime(safeFreq(freq), at);
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(peak, at + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.001, at + dur);
+
+    osc.connect(g);
+    g.connect(music.out);
+    osc.start(at);
+    osc.stop(at + dur + 0.02);
+    music.sources.push({ node: osc, until: at + dur + 0.02 });
+  }
+
+  // Soft off-beat percussive tick: a very short lowpassed noise blip.
+  function musicTickVoice(at) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(safeFreq(2200), at);
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(0.25, at + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.001, at + 0.035);
+
+    src.connect(filter);
+    filter.connect(g);
+    g.connect(music.out);
+    src.start(at);
+    src.stop(at + 0.06);
+    music.sources.push({ node: src, until: at + 0.06 });
+  }
+
+  // Emit whatever falls on one 16th-note step of the loop.
+  function musicStepAt(step, at) {
+    const bar = Math.floor(step / 16) % MUSIC_CHORDS.length;
+    const inBar = step % 16;
+    const chord = MUSIC_CHORDS[bar];
+
+    // Bass roots on beats 1 and 3, roughly half-note length.
+    if (inBar === 0 || inBar === 8) {
+      musicVoice("triangle", mf(chord.bass), at, MUSIC_STEP * 7, 0.5);
+    }
+
+    // Sparse square arpeggio cycling up the chord tones.
+    if (MUSIC_ARP_MASK[inBar]) {
+      let hit = 0;
+      for (let i = 0; i < inBar; i++) {
+        if (MUSIC_ARP_MASK[i]) hit++;
+      }
+      musicVoice(
+        "square",
+        mf(chord.arp[hit % chord.arp.length]),
+        at,
+        MUSIC_STEP * 0.9,
+        0.22
+      );
+    }
+
+    // Off-beat tick on beats 2 and 4.
+    if (inBar === 4 || inBar === 12) {
+      musicTickVoice(at);
+    }
+  }
+
+  // Lookahead scheduler body: schedule every step that falls within the
+  // next MUSIC_LOOKAHEAD seconds, then drop references to finished nodes.
+  function musicSchedule() {
+    if (!music) return;
+    try {
+      const horizon = ctx.currentTime + MUSIC_LOOKAHEAD;
+      while (music.nextTime < horizon) {
+        musicStepAt(music.step % MUSIC_TOTAL_STEPS, music.nextTime);
+        music.step++;
+        music.nextTime += MUSIC_STEP;
+      }
+      // Prune sources whose stop time has passed.
+      const now = ctx.currentTime;
+      const live = [];
+      for (let i = 0; i < music.sources.length; i++) {
+        if (music.sources[i].until > now) live.push(music.sources[i]);
+      }
+      music.sources = live;
+    } catch (e) {
+      /* never throw from audio */
+    }
+  }
+
+  function musicOn() {
+    if (music) return; // idempotent: never double-schedule
+    const t0 = ctx.currentTime;
+
+    const out = ctx.createGain();
+    out.gain.setValueAtTime(0, t0);
+    out.gain.linearRampToValueAtTime(MUSIC_GAIN, t0 + 0.1);
+    out.connect(master);
+
+    music = {
+      out: out,
+      sources: [],
+      step: 0, // always restarts from bar 1
+      nextTime: t0 + 0.05,
+      interval: setInterval(musicSchedule, MUSIC_TICK_MS),
+    };
+    musicSchedule(); // fill the first lookahead window immediately
+  }
+
+  function musicOff() {
+    if (!music) return;
+    const m = music;
+    music = null;
+    clearInterval(m.interval);
+
+    const t0 = ctx.currentTime;
+    try {
+      m.out.gain.cancelScheduledValues(t0);
+      m.out.gain.setValueAtTime(m.out.gain.value, t0);
+      m.out.gain.linearRampToValueAtTime(0, t0 + 0.3);
+    } catch (e) {
+      /* ignore */
+    }
+    // Stop everything just after the fade completes.
+    for (let i = 0; i < m.sources.length; i++) {
+      try {
+        m.sources[i].node.stop(t0 + 0.32);
+      } catch (e) {
+        /* node may already be stopped */
+      }
+    }
+    // Detach the bus once the fade is done.
+    if (typeof setTimeout === "function") {
+      setTimeout(function () {
+        try {
+          m.out.disconnect();
+        } catch (e) {
+          /* ignore */
+        }
+      }, 400);
     }
   }
 
