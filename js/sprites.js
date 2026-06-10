@@ -65,45 +65,121 @@ const Sprites = (function () {
   const BOSS_PURPLE = [0.75, 0.35, 0.95, 1];
 
   // ---------------------------------------------------------------------
+  // Player color themes.
+  // Each theme: hull (main body/wings/cannons), accent (stripes, chevron,
+  // wing trim, cannon tips), cockpit (canopy dot), glow (soft halo under
+  // the ship, low alpha) and engine (tail exhaust glow).
+  // 'classic' reproduces the original hardcoded palette exactly.
+  // ---------------------------------------------------------------------
+  const THEMES = [
+    {
+      id: 'classic', name: 'Classic',
+      hull: [1, 1, 1, 1],                 // white
+      accent: [0.95, 0.2, 0.2, 1],        // red
+      cockpit: [0.3, 0.6, 1, 1],          // blue
+      glow: [0.6, 0.7, 1, 0.13],
+      engine: [0.4, 0.7, 1, 0.45],
+    },
+    {
+      id: 'cyan', name: 'Cyan',
+      hull: [0.2, 0.9, 0.95, 1],          // neon teal
+      accent: [1, 1, 1, 1],               // white
+      cockpit: [0.15, 0.25, 0.85, 1],     // deep blue
+      glow: [0.3, 0.9, 1, 0.13],
+      engine: [0.35, 0.95, 1, 0.45],
+    },
+    {
+      id: 'crimson', name: 'Crimson',
+      hull: [0.95, 0.18, 0.25, 1],        // arcade red
+      accent: [1, 0.8, 0.2, 1],           // gold
+      cockpit: [1, 0.9, 0.55, 1],         // pale amber
+      glow: [1, 0.3, 0.3, 0.13],
+      engine: [1, 0.5, 0.25, 0.45],
+    },
+    {
+      id: 'emerald', name: 'Emerald',
+      hull: [0.25, 0.95, 0.55, 1],        // spring green
+      accent: [1, 1, 1, 1],               // white
+      cockpit: [0.25, 0.55, 1, 1],        // blue
+      glow: [0.35, 1, 0.55, 0.13],
+      engine: [0.4, 1, 0.6, 0.45],
+    },
+    {
+      id: 'violet', name: 'Violet',
+      hull: [0.8, 0.35, 1, 1],            // electric purple
+      accent: [0.3, 0.95, 1, 1],          // cyan
+      cockpit: [0.8, 1, 1, 1],            // pale ice
+      glow: [0.75, 0.4, 1, 0.13],
+      engine: [0.85, 0.5, 1, 0.45],
+    },
+    {
+      id: 'gold', name: 'Gold',
+      hull: [1, 0.78, 0.2, 1],            // amber gold
+      accent: [0.12, 0.1, 0.16, 1],       // near-black trim
+      cockpit: [0.3, 0.7, 1, 1],          // bright blue (stays visible)
+      glow: [1, 0.85, 0.4, 0.13],
+      engine: [1, 0.7, 0.3, 0.45],
+    },
+  ];
+
+  let currentTheme = THEMES[0]; // default 'classic'
+
+  // Set the active player theme by id; unknown ids fall back to 'classic'.
+  // Returns the applied theme object.
+  function setPlayerTheme(id) {
+    let theme = THEMES[0];
+    for (let i = 0; i < THEMES.length; i++) {
+      if (THEMES[i].id === id) { theme = THEMES[i]; break; }
+    }
+    currentTheme = theme;
+    return currentTheme;
+  }
+
+  function getPlayerTheme() {
+    return currentTheme.id;
+  }
+
+  // ---------------------------------------------------------------------
   // 1. Player fighter (~30px tall at scale 1)
   // ---------------------------------------------------------------------
   function player(x, y, scale, angle) {
     if (scale === undefined) scale = 1;
     angle = angle || 0;
     const a = angle, sc = scale;
+    const t = currentTheme;
 
     // Soft glow halo under the whole ship.
-    part(x, y, a, sc, 0, 0, 28, 36, 0, [0.6, 0.7, 1, 0.13]);
+    part(x, y, a, sc, 0, 0, 28, 36, 0, t.glow);
 
     // Central fuselage: needle nose down to the base.
-    triPart(x, y, a, sc, 0, -15, -3, -1, 3, -1, WHITE);     // nose cone
-    part(x, y, a, sc, 0, 5, 6, 13, 0, WHITE);               // hull body
-    triPart(x, y, a, sc, 0, -15, -1.2, -1, 1.2, -1, [1, 1, 1, 0.55]); // hot core
+    triPart(x, y, a, sc, 0, -15, -3, -1, 3, -1, t.hull);    // nose cone
+    part(x, y, a, sc, 0, 5, 6, 13, 0, t.hull);              // hull body
+    triPart(x, y, a, sc, 0, -15, -1.2, -1, 1.2, -1, [1, 1, 1, 0.55]); // hot core (specular, stays white)
 
-    // Red side accents / stripes along the hull.
-    part(x, y, a, sc, -3.6, 5, 2, 11, 0, RED);
-    part(x, y, a, sc, 3.6, 5, 2, 11, 0, RED);
-    // Red chevron at the base of the nose.
-    triPart(x, y, a, sc, 0, -7, -2.4, -1, 2.4, -1, RED);
+    // Accent side stripes along the hull.
+    part(x, y, a, sc, -3.6, 5, 2, 11, 0, t.accent);
+    part(x, y, a, sc, 3.6, 5, 2, 11, 0, t.accent);
+    // Accent chevron at the base of the nose.
+    triPart(x, y, a, sc, 0, -7, -2.4, -1, 2.4, -1, t.accent);
 
-    // Blue cockpit dot.
-    part(x, y, a, sc, 0, -2.5, 2.6, 3.2, 0, BLUE);
+    // Cockpit dot.
+    part(x, y, a, sc, 0, -2.5, 2.6, 3.2, 0, t.cockpit);
 
     // Wings flaring out at the base.
-    triPart(x, y, a, sc, -3, 1, -11, 12, -3, 12, WHITE);
-    triPart(x, y, a, sc, 3, 1, 11, 12, 3, 12, WHITE);
-    // Red wing trim.
-    triPart(x, y, a, sc, -4.5, 7, -10, 11.5, -4.5, 11.5, RED);
-    triPart(x, y, a, sc, 4.5, 7, 10, 11.5, 4.5, 11.5, RED);
+    triPart(x, y, a, sc, -3, 1, -11, 12, -3, 12, t.hull);
+    triPart(x, y, a, sc, 3, 1, 11, 12, 3, 12, t.hull);
+    // Accent wing trim.
+    triPart(x, y, a, sc, -4.5, 7, -10, 11.5, -4.5, 11.5, t.accent);
+    triPart(x, y, a, sc, 4.5, 7, 10, 11.5, 4.5, 11.5, t.accent);
 
     // Side cannons riding the wing tips.
-    part(x, y, a, sc, -9.2, 8, 2.4, 11, 0, WHITE);
-    part(x, y, a, sc, 9.2, 8, 2.4, 11, 0, WHITE);
-    part(x, y, a, sc, -9.2, 3.2, 1.4, 3, 0, RED);  // cannon tips
-    part(x, y, a, sc, 9.2, 3.2, 1.4, 3, 0, RED);
+    part(x, y, a, sc, -9.2, 8, 2.4, 11, 0, t.hull);
+    part(x, y, a, sc, 9.2, 8, 2.4, 11, 0, t.hull);
+    part(x, y, a, sc, -9.2, 3.2, 1.4, 3, 0, t.accent);  // cannon tips
+    part(x, y, a, sc, 9.2, 3.2, 1.4, 3, 0, t.accent);
 
     // Engine glow at the tail.
-    part(x, y, a, sc, 0, 12.5, 4, 3, 0, [0.4, 0.7, 1, 0.45]);
+    part(x, y, a, sc, 0, 12.5, 4, 3, 0, t.engine);
   }
 
   // ---------------------------------------------------------------------
@@ -368,6 +444,9 @@ const Sprites = (function () {
 
   return {
     player,
+    setPlayerTheme,
+    getPlayerTheme,
+    playerThemes: THEMES.map(function (t) { return { id: t.id, name: t.name }; }),
     bee,
     butterfly,
     boss,
