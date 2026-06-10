@@ -346,18 +346,18 @@ const GameAudio = (function () {
   // ---------------------------------------------------------------------
   // Background music loop
   //
-  // An original 8-bar chip-tune loop in A minor at ~112 BPM:
+  // An original 8-bar chip-tune loop in A minor, driving at ~132 BPM:
   //   Am | F | C | G | Am | F | Dm | E
-  // Three quiet voices: a triangle bass on the chord roots (beats 1 & 3),
-  // a sparse square-wave 16th-note broken-chord arpeggio on top, and a
-  // very short filtered-noise tick on the off-beats (2 & 4). Everything
-  // runs through its own bus gain (~0.07) into master, so setMuted still
-  // silences it. Notes are produced by a lookahead scheduler: a ~100ms
-  // setInterval that schedules ~300ms ahead of ctx.currentTime.
+  // Voices: a kick thump on beats 1 & 3, a triangle bass pumping eighth
+  // notes with octave jumps, a dense square-wave 16th arpeggio (accented
+  // steps get a high octave echo), and a tick/hat pattern across the bar.
+  // Everything runs through its own bus gain into master, so setMuted
+  // still silences it. Notes are produced by a lookahead scheduler: a
+  // ~100ms setInterval that schedules ~300ms ahead of ctx.currentTime.
   // ---------------------------------------------------------------------
 
-  const MUSIC_GAIN = 0.07; // music bus level into master
-  const MUSIC_STEP = 60 / 112 / 4; // one 16th note at 112 BPM (~0.134s)
+  const MUSIC_GAIN = 0.1; // music bus level into master
+  const MUSIC_STEP = 60 / 132 / 4; // one 16th note at 132 BPM (~0.114s)
   const MUSIC_TOTAL_STEPS = 8 * 16; // 8 bars of 16 sixteenths
   const MUSIC_LOOKAHEAD = 0.3; // seconds scheduled ahead
   const MUSIC_TICK_MS = 100; // scheduler wakeup interval
@@ -374,8 +374,8 @@ const GameAudio = (function () {
     { bass: 40, arp: [64, 68, 71, 76] }, // E   (E4 G#4 B4 E5)
   ];
 
-  // Which 16ths of each bar the arpeggio plays (sparse, lightly syncopated).
-  const MUSIC_ARP_MASK = [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0];
+  // Which 16ths of each bar the arpeggio plays (dense, driving).
+  const MUSIC_ARP_MASK = [1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1];
 
   // One oscillator note on the music bus, scheduled at absolute time `at`.
   function musicVoice(type, freq, at, dur, peak) {
@@ -395,18 +395,18 @@ const GameAudio = (function () {
     music.sources.push({ node: osc, until: at + dur + 0.02 });
   }
 
-  // Soft off-beat percussive tick: a very short lowpassed noise blip.
-  function musicTickVoice(at) {
+  // Short percussive tick: a lowpassed noise blip (gain/brightness vary).
+  function musicTickVoice(at, peak, brightness) {
     const src = ctx.createBufferSource();
     src.buffer = noiseBuffer;
 
     const filter = ctx.createBiquadFilter();
     filter.type = "lowpass";
-    filter.frequency.setValueAtTime(safeFreq(2200), at);
+    filter.frequency.setValueAtTime(safeFreq(brightness || 2200), at);
 
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, at);
-    g.gain.linearRampToValueAtTime(0.25, at + 0.004);
+    g.gain.linearRampToValueAtTime(peak != null ? peak : 0.25, at + 0.004);
     g.gain.exponentialRampToValueAtTime(0.001, at + 0.035);
 
     src.connect(filter);
@@ -417,35 +417,61 @@ const GameAudio = (function () {
     music.sources.push({ node: src, until: at + 0.06 });
   }
 
+  // Low kick thump: a quick sine pitch-drop, the loop's heartbeat.
+  function musicKickVoice(at) {
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(safeFreq(150), at);
+    osc.frequency.exponentialRampToValueAtTime(safeFreq(45), at + 0.1);
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(0.6, at + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.001, at + 0.13);
+
+    osc.connect(g);
+    g.connect(music.out);
+    osc.start(at);
+    osc.stop(at + 0.15);
+    music.sources.push({ node: osc, until: at + 0.15 });
+  }
+
   // Emit whatever falls on one 16th-note step of the loop.
   function musicStepAt(step, at) {
     const bar = Math.floor(step / 16) % MUSIC_CHORDS.length;
     const inBar = step % 16;
     const chord = MUSIC_CHORDS[bar];
 
-    // Bass roots on beats 1 and 3, roughly half-note length.
+    // Kick thump on beats 1 and 3.
     if (inBar === 0 || inBar === 8) {
-      musicVoice("triangle", mf(chord.bass), at, MUSIC_STEP * 7, 0.5);
+      musicKickVoice(at);
     }
 
-    // Sparse square arpeggio cycling up the chord tones.
+    // Driving eighth-note bass, jumping up an octave on the off-eighths.
+    if (inBar % 2 === 0) {
+      const octave = (inBar / 2) % 2 === 1 ? 12 : 0;
+      musicVoice("triangle", mf(chord.bass + octave), at, MUSIC_STEP * 1.7, 0.45);
+    }
+
+    // Dense square arpeggio cycling up the chord tones; accented steps
+    // (beat starts) get a quiet high-octave echo for sparkle.
     if (MUSIC_ARP_MASK[inBar]) {
       let hit = 0;
       for (let i = 0; i < inBar; i++) {
         if (MUSIC_ARP_MASK[i]) hit++;
       }
-      musicVoice(
-        "square",
-        mf(chord.arp[hit % chord.arp.length]),
-        at,
-        MUSIC_STEP * 0.9,
-        0.22
-      );
+      const note = chord.arp[hit % chord.arp.length];
+      musicVoice("square", mf(note), at, MUSIC_STEP * 0.9, 0.22);
+      if (inBar % 4 === 0) {
+        musicVoice("square", mf(note + 12), at, MUSIC_STEP * 0.8, 0.1);
+      }
     }
 
-    // Off-beat tick on beats 2 and 4.
+    // Snare-ish accents on beats 2 and 4, soft hats on the other off-eighths.
     if (inBar === 4 || inBar === 12) {
-      musicTickVoice(at);
+      musicTickVoice(at, 0.32, 3200);
+    } else if (inBar % 4 === 2) {
+      musicTickVoice(at, 0.12, 5200);
     }
   }
 
