@@ -56,6 +56,8 @@
   );
   let lives = 3; // total ships including the one in play
   let nextExtra = 20000;
+  let DP = Difficulty.params(); // active difficulty tuning
+  let lbEntryActive = false;    // leaderboard initials UI is up
 
   // --- Player ---------------------------------------------------------------
   const player = {
@@ -193,11 +195,11 @@
     return flying ? 400 : 150;
   }
 
-  // --- Difficulty curve --------------------------------------------------------
-  function diveInterval() { return Math.max(0.8, 2.2 - (stage - 1) * 0.2); }
-  function maxDivers() { return Math.min(4, 1 + Math.floor(stage / 2)); }
-  function diverSpeed() { return Math.min(700, 330 + stage * 15); }
-  function bulletSpeed() { return Math.min(500, 240 + stage * 12); }
+  // --- Difficulty curve (stage ramp x selected difficulty) ----------------------
+  function diveInterval() { return Math.max(0.8, 2.2 - (stage - 1) * 0.2) * DP.diveIntervalMul; }
+  function maxDivers() { return Math.max(1, Math.min(4, 1 + Math.floor(stage / 2)) + DP.maxDiversBonus); }
+  function diverSpeed() { return Math.min(700, 330 + stage * 15) * DP.diverSpeedMul; }
+  function bulletSpeed() { return Math.min(500, 240 + stage * 12) * DP.bulletSpeedMul; }
   function entrySpeed() { return Math.min(560, 320 + stage * 10); }
 
   // --- HUD ----------------------------------------------------------------------
@@ -209,7 +211,7 @@
       hiscoreEl.textContent = String(hiscore);
     }
     while (score >= nextExtra) {
-      nextExtra += 70000;
+      nextExtra += DP.extraLifeEvery;
       if (lives < 6) {
         lives++;
         GameAudio.extraLife();
@@ -239,16 +241,39 @@
     state = ST.ATTRACT;
     stateT = 0;
     stageEl.innerHTML = "&nbsp;";
-    showOverlay("NEON SWARM", "Drag to move · tap to fire", "TAP TO START", false);
+    hideOverlay();
+    Menu.show({
+      hiscore: hiscore,
+      onStart: function () {
+        GameAudio.unlock();
+        startGame();
+      },
+      onShowLeaderboard: function () {
+        Leaderboard.showBoard(function () { goAttract(); });
+      },
+      themes: Sprites.playerThemes,
+      getTheme: function () { return Sprites.getPlayerTheme(); },
+      setTheme: function (id) {
+        Sprites.setPlayerTheme(id);
+        try { localStorage.setItem(THEME_KEY, id); } catch (e) { /* private mode */ }
+      },
+      difficulties: Difficulty.levels,
+      getDifficulty: function () { return Difficulty.get(); },
+      setDifficulty: function (id) { Difficulty.set(id); },
+      getMuted: function () { return GameAudio.muted; },
+      setMuted: function (m) { GameAudio.setMuted(m); },
+    });
   }
 
   function startGame() {
+    Menu.hide();
+    DP = Difficulty.params();
     stage = 1;
     setScore(0);
     scoreEl.textContent = "0";
     hiscoreEl.textContent = String(hiscore);
-    lives = 3;
-    nextExtra = 20000;
+    lives = DP.startLives;
+    nextExtra = DP.extraLifeFirst;
     player.dual = false;
     GameAudio.coin();
     goIntro();
@@ -331,9 +356,24 @@
     } else {
       state = ST.OVER;
       stateT = 0;
-      localStorage.setItem(HI_KEY, String(hiscore));
+      try { localStorage.setItem(HI_KEY, String(hiscore)); } catch (e) { /* ok */ }
       GameAudio.gameOver();
-      showOverlay("GAME OVER", "SCORE  " + score, "TAP TO PLAY AGAIN", true);
+      if (Leaderboard.qualifies(score)) {
+        showOverlay("GAME OVER", "SCORE  " + score, "", true);
+        const finalScore = score;
+        const finalStage = stage;
+        lbEntryActive = true;
+        setTimeout(function () {
+          if (state !== ST.OVER) { lbEntryActive = false; return; }
+          hideOverlay();
+          Leaderboard.showEntry(finalScore, finalStage, Difficulty.get(), function () {
+            lbEntryActive = false;
+            goAttract();
+          });
+        }, 1400);
+      } else {
+        showOverlay("GAME OVER", "SCORE  " + score, "TAP TO PLAY AGAIN", true);
+      }
     }
   }
 
@@ -504,7 +544,7 @@
     e.alive = false;
     explosions.push({ x: e.x, y: e.y, t: 0, big: e.kind === "boss" });
     GameAudio.enemyExplode(e.kind);
-    addScore(enemyScore(e));
+    addScore(Math.round(enemyScore(e) * DP.scoreMul));
     if (e.state === "beam") GameAudio.tractorOff();
     if (e.captured) {
       if (e.state === "formation") {
@@ -603,7 +643,7 @@
         const done = followPath(e, dt);
         // Occasional pot-shots while flying in (stage 2+).
         if (stage >= 2 && e.y > H() * 0.15 && e.y < H() * 0.6 &&
-            Math.random() < dt * 0.12) {
+            Math.random() < dt * 0.12 * DP.entryFireMul) {
           fireEnemyBullet(e);
         }
         if (done) beginToSlot(e);
@@ -750,7 +790,7 @@
           const e = cands[(Math.random() * cands.length) | 0];
           if (e.kind === "boss") {
             const beamActive = enemies.some((b) => b.alive && (b.state === "beam" || (b.beamDive && b.state === "diving")));
-            const beam = !player.dual && !beamActive && Math.random() < 0.4;
+            const beam = !player.dual && !beamActive && Math.random() < DP.beamChance;
             startBossDive(e, beam);
           } else {
             startDive(e);
@@ -830,7 +870,7 @@
               e.alive = false;
               explosions.push({ x: e.x, y: e.y, t: 0, big: false });
               GameAudio.enemyExplode(e.kind);
-              addScore(100);
+              addScore(Math.round(100 * DP.scoreMul));
               chHits++;
               chWaveHits++;
             } else {
@@ -1055,6 +1095,7 @@
 
   // --- Input ----------------------------------------------------------------------
   function startFromUI() {
+    if (lbEntryActive) return false;
     if (state === ST.ATTRACT) {
       startGame();
       return true;
