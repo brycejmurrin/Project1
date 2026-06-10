@@ -181,6 +181,64 @@ const Menu = (function () {
     "  opacity: 0.75;",
     "  text-shadow: 0 0 8px rgba(160, 220, 255, 0.4);",
     "}",
+    ".nsh-panel {",
+    "  position: fixed;",
+    "  inset: 0;",
+    "  z-index: 1001;",
+    "  flex-direction: column;",
+    "  align-items: center;",
+    "  overflow-y: auto;",
+    "  -webkit-overflow-scrolling: touch;",
+    "  font-family: \"Courier New\", ui-monospace, monospace;",
+    "  -webkit-user-select: none;",
+    "  user-select: none;",
+    "  -webkit-tap-highlight-color: transparent;",
+    "  background: rgba(5, 6, 15, 0.97);",
+    "  gap: 22px;",
+    "  padding-top: calc(24px + env(safe-area-inset-top));",
+    "  padding-bottom: calc(24px + env(safe-area-inset-bottom));",
+    "  padding-left: calc(24px + env(safe-area-inset-left));",
+    "  padding-right: calc(24px + env(safe-area-inset-right));",
+    "}",
+    ".nsh-title {",
+    "  font-size: clamp(22px, 6vw, 34px);",
+    "  font-weight: 800;",
+    "  letter-spacing: 5px;",
+    "  color: #40e0ff;",
+    "  text-shadow: 0 0 20px rgba(64, 224, 255, 0.8);",
+    "  margin: 0;",
+    "}",
+    ".nsh-section {",
+    "  width: 100%;",
+    "  max-width: 340px;",
+    "  display: flex;",
+    "  flex-direction: column;",
+    "  gap: 10px;",
+    "}",
+    ".nsh-heading {",
+    "  font-size: 12px;",
+    "  font-weight: 700;",
+    "  letter-spacing: 4px;",
+    "  color: #ff3b4d;",
+    "  text-shadow: 0 0 8px rgba(255, 59, 77, 0.7);",
+    "  padding-bottom: 6px;",
+    "  border-bottom: 1px solid rgba(255, 59, 77, 0.3);",
+    "}",
+    ".nsh-row {",
+    "  display: flex;",
+    "  align-items: baseline;",
+    "  gap: 10px;",
+    "  font-size: 13px;",
+    "  color: #aee9ff;",
+    "  letter-spacing: 1px;",
+    "}",
+    ".nsh-key {",
+    "  min-width: 100px;",
+    "  font-weight: 700;",
+    "  color: #ffffff;",
+    "  text-shadow: 0 0 6px rgba(160, 220, 255, 0.5);",
+    "  flex-shrink: 0;",
+    "}",
   ].join("\n");
 
   let container = null;
@@ -196,6 +254,7 @@ const Menu = (function () {
   let sensSectionEl = null;
   let sensRowEl = null;
   let soundBtnEl = null;
+  let helpPanel = null;
 
   function getOpt(name, fallback) {
     return typeof opts[name] === "function" ? opts[name] : fallback;
@@ -316,6 +375,9 @@ const Menu = (function () {
       callOpt("onShowLeaderboard");
     });
     bottomRow.appendChild(lbBtn);
+    const howtoBtn = makeButton("nsm-small", "HOW TO PLAY");
+    howtoBtn.addEventListener("click", showHelp);
+    bottomRow.appendChild(howtoBtn);
     container.appendChild(bottomRow);
 
     // 7. Footer
@@ -331,6 +393,74 @@ const Menu = (function () {
     if (soundBtnEl) {
       soundBtnEl.textContent = muted ? "SOUND: OFF" : "SOUND: ON";
     }
+  }
+
+  function buildHelp() {
+    if (helpPanel) return;
+    helpPanel = document.createElement("div");
+    helpPanel.className = "nsh-panel";
+    helpPanel.style.display = "none";
+    helpPanel.addEventListener("pointerdown", function (e) { e.stopPropagation(); });
+    helpPanel.addEventListener("pointerup", function (e) { e.stopPropagation(); });
+
+    const htitle = document.createElement("h2");
+    htitle.className = "nsh-title";
+    htitle.textContent = "HOW TO PLAY";
+    helpPanel.appendChild(htitle);
+
+    function helpSection(heading, rows) {
+      const sec = document.createElement("div");
+      sec.className = "nsh-section";
+      const h = document.createElement("div");
+      h.className = "nsh-heading";
+      h.textContent = heading;
+      sec.appendChild(h);
+      rows.forEach(function (pair) {
+        const row = document.createElement("div");
+        row.className = "nsh-row";
+        const key = document.createElement("span");
+        key.className = "nsh-key";
+        key.textContent = pair[0];
+        const desc = document.createElement("span");
+        desc.textContent = pair[1];
+        row.appendChild(key);
+        row.appendChild(desc);
+        sec.appendChild(row);
+      });
+      return sec;
+    }
+
+    helpPanel.appendChild(helpSection("CONTROLS", [
+      ["DRAG FINGER", "Steer your ship"],
+      ["FIRE BUTTON", "Hold to autofire"],
+      ["⏸ PAUSE", "Tap button · top right"],
+    ]));
+    helpPanel.appendChild(helpSection("ENEMIES", [
+      ["BEE", "50 · 100 pts while diving"],
+      ["BUTTERFLY", "80 · 160 pts while diving"],
+      ["BOSS", "150 · 400 pts diving, 2 hits"],
+    ]));
+    helpPanel.appendChild(helpSection("TIPS", [
+      ["★ RESCUE", "Saved ship → dual fighter"],
+      ["★ CHALLENGE", "Destroy all → bonus points"],
+      ["★ EXTRA LIFE", "Every 20 000 pts"],
+    ]));
+
+    const back = makeButton("nsm-start", "BACK");
+    back.style.marginTop = "8px";
+    back.addEventListener("click", hideHelp);
+    helpPanel.appendChild(back);
+
+    document.body.appendChild(helpPanel);
+  }
+
+  function showHelp() {
+    buildHelp();
+    helpPanel.style.display = "flex";
+  }
+
+  function hideHelp() {
+    if (helpPanel) helpPanel.style.display = "none";
   }
 
   function clearChildren(el) {
