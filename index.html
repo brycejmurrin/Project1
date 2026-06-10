@@ -6,9 +6,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Neon Dodge">
+<meta name="apple-mobile-web-app-title" content="Neon Swarm">
 <meta name="theme-color" content="#05060f">
-<title>Neon Dodge</title>
+<title>Neon Swarm</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" type="image/png" href="icons/icon-180.png">
@@ -18,13 +18,23 @@
 <canvas id="game"></canvas>
 
 <div id="hud">
-  <div id="score">0</div>
-  <div id="best"></div>
+  <div class="hud-col">
+    <div class="hud-label">1UP</div>
+    <div id="score" class="hud-value">00</div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-label">HIGH SCORE</div>
+    <div id="hiscore" class="hud-value">0</div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-label">&nbsp;</div>
+    <div id="stage" class="hud-value">&nbsp;</div>
+  </div>
 </div>
 
 <div id="overlay">
-  <h1 id="title">NEON&nbsp;DODGE</h1>
-  <p id="subtitle">Drag to steer &middot; dodge the blocks</p>
+  <h1 id="title">NEON&nbsp;SWARM</h1>
+  <p id="subtitle">Drag to move &middot; tap to fire</p>
   <p id="prompt">TAP TO START</p>
 </div>
 
@@ -33,6 +43,9 @@
 </div>
 
 <script src="js/renderer.js"></script>
+<script src="js/paths.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/audio.js"></script>
 <script src="js/game.js"></script>
 </body>
 </html>

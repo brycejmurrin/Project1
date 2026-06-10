@@ -1,7 +1,7 @@
 {
-  "name": "Neon Dodge",
-  "short_name": "Neon Dodge",
-  "description": "Endless WebGL dodger — drag to steer, dodge the blocks.",
+  "name": "Neon Swarm",
+  "short_name": "Neon Swarm",
+  "description": "Galaga-style WebGL fixed shooter — dodge, fire, and rescue your captured fighter.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
