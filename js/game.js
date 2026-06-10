@@ -79,8 +79,9 @@
     alive: true,
     invuln: 0,
   };
-  const PLAYER_R = 12;
-  const DUAL_GAP = 24;
+  let PLAYER_R = 12;
+  let DUAL_GAP = 24;
+  let SCALE = 1; // viewport-relative sprite/geometry scale
 
   let missiles = []; // {x, y}
   let bullets = [];  // {x, y, vx, vy, phase}
@@ -168,10 +169,15 @@
   const form = { cell: 30, rowH: 28, topY: 90 };
 
   function computeMetrics() {
-    form.cell = Math.min(34, Math.floor(W() / 11.5));
+    // Scale sprites proportionally to viewport area; clamped so they stay
+    // readable on the smallest phone and don't go absurd on a 4K desktop.
+    SCALE = Math.max(0.88, Math.min(1.6, Math.sqrt(W() * H() / (390 * 844))));
+    PLAYER_R = Math.round(12 * SCALE);
+    DUAL_GAP  = Math.round(24 * SCALE);
+    form.cell = Math.min(Math.round(34 * SCALE), Math.floor(W() / 11.5));
     form.rowH = Math.round(form.cell * 0.95);
-    form.topY = Math.round(H() * 0.10) + 26;
-    player.y = H() - Math.max(86, H() * 0.11);
+    form.topY = Math.round(H() * 0.10) + Math.round(26 * SCALE);
+    player.y  = H() - Math.max(Math.round(86 * SCALE), H() * 0.11);
   }
 
   function slotPos(row, col) {
@@ -224,7 +230,8 @@
   }
 
   function enemyRadius(e) {
-    return e.kind === "boss" ? 16 : e.kind === "butterfly" ? 14 : 13;
+    const r = e.kind === "boss" ? 16 : e.kind === "butterfly" ? 14 : 13;
+    return Math.round(r * SCALE);
   }
 
   function enemyScore(e) {
@@ -587,8 +594,8 @@
   }
 
   function beamGeometry(boss) {
-    const top = boss.y + 14;
-    const height = Math.max(80, player.y - top + 16);
+    const top = boss.y + Math.round(14 * SCALE);
+    const height = Math.max(Math.round(80 * SCALE), player.y - top + Math.round(16 * SCALE));
     return { top, height, bottomHalfW: height * 0.55 / 2 };
   }
 
@@ -611,10 +618,10 @@
     if (e.captured) {
       if (e.state === "formation") {
         // Captured fighter escapes upward, lost for good.
-        lostShip = { x: e.x, y: e.y - 22 };
+        lostShip = { x: e.x, y: e.y - Math.round(22 * SCALE) };
       } else {
         // Rescued! It descends to rejoin the player.
-        rescueShip = { x: e.x, y: e.y - 22 };
+        rescueShip = { x: e.x, y: e.y - Math.round(22 * SCALE) };
       }
       e.captured = false;
     }
@@ -630,7 +637,7 @@
     const keySpeed = 460;
     if (keys.left) player.targetX -= keySpeed * dt;
     if (keys.right) player.targetX += keySpeed * dt;
-    const margin = PLAYER_R + 8 + (player.dual ? DUAL_GAP / 2 : 0);
+    const margin = PLAYER_R + Math.round(8 * SCALE) + (player.dual ? DUAL_GAP / 2 : 0);
     player.targetX = clamp(player.targetX, margin, W() - margin);
     player.x += (player.targetX - player.x) * Math.min(1, dt * 18);
     if (player.invuln > 0) player.invuln -= dt;
@@ -670,9 +677,9 @@
         ? [player.x - DUAL_GAP / 2, player.x + DUAL_GAP / 2]
         : [player.x];
       for (const ox of origins) {
-        missiles.push({ x: ox, y: player.y - 16, vx: -SPREAD_VX });
-        missiles.push({ x: ox, y: player.y - 16, vx: 0 });
-        missiles.push({ x: ox, y: player.y - 16, vx: SPREAD_VX });
+        missiles.push({ x: ox, y: player.y - Math.round(16 * SCALE), vx: -SPREAD_VX });
+        missiles.push({ x: ox, y: player.y - Math.round(16 * SCALE), vx: 0 });
+        missiles.push({ x: ox, y: player.y - Math.round(16 * SCALE), vx: SPREAD_VX });
       }
       GameAudio.shoot();
       if (--weaponAmmo <= 0) { weaponType = "normal"; weaponAmmo = 0; }
@@ -684,12 +691,12 @@
     const cap = player.dual ? 6 : (rapidMod ? 4 : 2);
     if (player.dual) {
       const room = cap - missiles.length;
-      if (room >= 1) missiles.push({ x: player.x - DUAL_GAP / 2, y: player.y - 16, vx: 0 });
-      if (room >= 2) missiles.push({ x: player.x + DUAL_GAP / 2, y: player.y - 16, vx: 0 });
+      if (room >= 1) missiles.push({ x: player.x - DUAL_GAP / 2, y: player.y - Math.round(16 * SCALE), vx: 0 });
+      if (room >= 2) missiles.push({ x: player.x + DUAL_GAP / 2, y: player.y - Math.round(16 * SCALE), vx: 0 });
       if (room >= 1) GameAudio.shoot();
     } else {
       if (missiles.length < cap) {
-        missiles.push({ x: player.x, y: player.y - 16, vx: 0 });
+        missiles.push({ x: player.x, y: player.y - Math.round(16 * SCALE), vx: 0 });
         GameAudio.shoot();
       }
     }
@@ -1035,7 +1042,7 @@
       const p = powerups[i];
       p.y += 70 * dt;
       p.t += dt;
-      if (player.alive && Math.hypot(p.x - player.x, p.y - player.y) < 22) {
+      if (player.alive && Math.hypot(p.x - player.x, p.y - player.y) < 22 * SCALE) {
         weaponType = p.type;
         weaponAmmo = p.type === "rapid" ? 80 : 25;
         Fx.flash(0.5);
@@ -1176,24 +1183,24 @@
 
     for (const e of enemies) {
       if (!e.alive || e.state === "wait") continue;
-      if (e.kind === "bee") Sprites.bee(e.x, e.y, 1, e.angle, e.wingPhase);
-      else if (e.kind === "butterfly") Sprites.butterfly(e.x, e.y, 1, e.angle, e.wingPhase);
-      else Sprites.boss(e.x, e.y, 1, e.angle, e.wingPhase, e.hp <= 1);
-      if (e.captured) Sprites.player(e.x, e.y - 22, 0.7, Math.PI);
+      if (e.kind === "bee") Sprites.bee(e.x, e.y, SCALE, e.angle, e.wingPhase);
+      else if (e.kind === "butterfly") Sprites.butterfly(e.x, e.y, SCALE, e.angle, e.wingPhase);
+      else Sprites.boss(e.x, e.y, SCALE, e.angle, e.wingPhase, e.hp <= 1);
+      if (e.captured) Sprites.player(e.x, e.y - Math.round(22 * SCALE), 0.7 * SCALE, Math.PI);
     }
 
-    if (rescueShip) Sprites.player(rescueShip.x, rescueShip.y, 0.85, 0);
-    if (lostShip) Sprites.player(lostShip.x, lostShip.y, 0.7, Math.PI);
+    if (rescueShip) Sprites.player(rescueShip.x, rescueShip.y, 0.85 * SCALE, 0);
+    if (lostShip) Sprites.player(lostShip.x, lostShip.y, 0.7 * SCALE, Math.PI);
 
-    for (const b of bullets) Sprites.enemyBullet(b.x, b.y, b.phase);
-    for (const m of missiles) Sprites.playerMissile(m.x, m.y);
+    for (const b of bullets) Sprites.enemyBullet(b.x, b.y, b.phase, SCALE);
+    for (const m of missiles) Sprites.playerMissile(m.x, m.y, SCALE);
     for (const p of powerups) {
       const pulse = 0.8 + 0.2 * Math.sin(p.t * 9);
       const color = p.type === "rapid"
         ? [0.25, 0.88, 1, pulse]
         : [1, 0.75, 0.12, pulse];
-      Renderer.rotQuad(p.x, p.y, 13, 13, p.t * 3, color);
-      Renderer.rotQuad(p.x, p.y, 7, 7, -p.t * 5, [1, 1, 1, pulse * 0.6]);
+      Renderer.rotQuad(p.x, p.y, 13 * SCALE, 13 * SCALE, p.t * 3, color);
+      Renderer.rotQuad(p.x, p.y, 7 * SCALE, 7 * SCALE, -p.t * 5, [1, 1, 1, pulse * 0.6]);
     }
 
     // Player (blinks while invulnerable).
@@ -1203,10 +1210,10 @@
       (player.invuln <= 0 || Math.floor(player.invuln * 10) % 2 === 0);
     if (drawPlayer) {
       if (player.dual) {
-        Sprites.player(player.x - DUAL_GAP / 2, player.y, 1, 0);
-        Sprites.player(player.x + DUAL_GAP / 2, player.y, 1, 0);
+        Sprites.player(player.x - DUAL_GAP / 2, player.y, SCALE, 0);
+        Sprites.player(player.x + DUAL_GAP / 2, player.y, SCALE, 0);
       } else {
-        Sprites.player(player.x, player.y, 1, 0);
+        Sprites.player(player.x, player.y, SCALE, 0);
       }
     }
 
@@ -1215,13 +1222,14 @@
 
     // Bottom HUD: reserve lives and stage flags.
     if (state !== ST.ATTRACT) {
+      const lifeStep = Math.round(26 * SCALE);
       for (let i = 0; i < Math.max(0, lives - 1); i++) {
-        Sprites.player(18 + i * 26, H() - 20, 0.62, 0);
+        Sprites.player(Math.round(14 * SCALE) + i * lifeStep, H() - 20, 0.62 * SCALE, 0);
       }
-      // Flags sit left of the FIRE button.
+      const flagStep = Math.round(14 * SCALE);
       const flags = Math.min(stage, 8);
       for (let i = 0; i < flags; i++) {
-        Sprites.flag(W() - 104 - i * 16, H() - 20, 1);
+        Sprites.flag(W() - 100 - i * flagStep, H() - 20, SCALE);
       }
     }
 

@@ -306,29 +306,24 @@ const Sprites = (function () {
   // ---------------------------------------------------------------------
   // 5. Player missile: slim white-hot dart (~3x14) with cyan glow.
   // ---------------------------------------------------------------------
-  function playerMissile(x, y) {
-    // Cyan glow underlay.
-    Renderer.rotQuad(x, y, 7, 18, 0, [0.3, 0.9, 1, 0.18]);
-    // Body.
-    Renderer.rotQuad(x, y + 1.5, 3, 11, 0, WHITE);
-    // Pointed tip.
-    Renderer.tri(x, y - 7, x - 1.5, y - 4, x + 1.5, y - 4, WHITE);
-    // Hot core stacked for extra brightness.
-    Renderer.rotQuad(x, y, 1.2, 12, 0, [1, 1, 1, 0.7]);
+  function playerMissile(x, y, sc) {
+    sc = sc || 1;
+    Renderer.rotQuad(x, y, 7*sc, 18*sc, 0, [0.3, 0.9, 1, 0.18]);
+    Renderer.rotQuad(x, y + 1.5*sc, 3*sc, 11*sc, 0, WHITE);
+    Renderer.tri(x, y - 7*sc, x - 1.5*sc, y - 4*sc, x + 1.5*sc, y - 4*sc, WHITE);
+    Renderer.rotQuad(x, y, 1.2*sc, 12*sc, 0, [1, 1, 1, 0.7]);
   }
 
   // ---------------------------------------------------------------------
   // 6. Enemy bullet: small red/yellow projectile (~6px), pulsing.
   // ---------------------------------------------------------------------
-  function enemyBullet(x, y, phase) {
+  function enemyBullet(x, y, phase, sc) {
+    sc = sc || 1;
     phase = phase || 0;
-    const pulse = 0.5 + 0.5 * Math.sin(phase); // 0..1
-    // Glow.
-    Renderer.rotQuad(x, y, 11, 11, Math.PI / 4, [1, 0.3, 0.1, 0.10 + 0.10 * pulse]);
-    // Red diamond body.
-    Renderer.rotQuad(x, y, 6, 6, Math.PI / 4, [0.95, 0.25 + 0.15 * pulse, 0.1, 1]);
-    // Yellow hot core, brightness pulsing.
-    Renderer.rotQuad(x, y, 3, 3, Math.PI / 4, [1, 0.9, 0.3, 0.55 + 0.45 * pulse]);
+    const pulse = 0.5 + 0.5 * Math.sin(phase);
+    Renderer.rotQuad(x, y, 11*sc, 11*sc, Math.PI / 4, [1, 0.3, 0.1, 0.10 + 0.10 * pulse]);
+    Renderer.rotQuad(x, y, 6*sc, 6*sc, Math.PI / 4, [0.95, 0.25 + 0.15 * pulse, 0.1, 1]);
+    Renderer.rotQuad(x, y, 3*sc, 3*sc, Math.PI / 4, [1, 0.9, 0.3, 0.55 + 0.45 * pulse]);
   }
 
   // ---------------------------------------------------------------------
