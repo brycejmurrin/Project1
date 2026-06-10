@@ -233,7 +233,7 @@ const Menu = (function () {
     "  letter-spacing: 1px;",
     "}",
     ".nsh-key {",
-    "  min-width: 100px;",
+    "  min-width: 112px;",
     "  font-weight: 700;",
     "  color: #ffffff;",
     "  text-shadow: 0 0 6px rgba(160, 220, 255, 0.5);",
@@ -430,10 +430,16 @@ const Menu = (function () {
       return sec;
     }
 
-    helpPanel.appendChild(helpSection("CONTROLS", [
+    helpPanel.appendChild(helpSection("TOUCH — iOS / MOBILE", [
       ["DRAG FINGER", "Steer your ship"],
-      ["FIRE BUTTON", "Hold to autofire"],
-      ["⏸ PAUSE", "Tap button · top right"],
+      ["FIRE BUTTON", "Tap / hold to autofire"],
+      ["⏸ PAUSE", "Button · top right"],
+    ]));
+    helpPanel.appendChild(helpSection("KEYBOARD — DESKTOP", [
+      ["← → / A D", "Steer your ship"],
+      ["SPACE", "Fire (hold to autofire)"],
+      ["ENTER", "Start game"],
+      ["ESC / P", "Pause"],
     ]));
     helpPanel.appendChild(helpSection("ENEMIES", [
       ["BEE", "50 · 100 pts while diving"],
