@@ -51,12 +51,12 @@
 
 <div id="overlay">
   <h1 id="title">NEON&nbsp;SWARM</h1>
-  <p id="subtitle">Drag to move &middot; hold FIRE to shoot</p>
+  <p id="subtitle">Drag to move · hold FIRE to shoot</p>
   <p id="prompt">TAP TO START</p>
 </div>
 
 <div id="nogl" hidden>
-  <p>Sorry &mdash; your browser does not support WebGL.</p>
+  <p>Sorry — your browser does not support WebGL.</p>
 </div>
 
 <!-- Scripts placed at end of body to ensure DOM elements exist -->
@@ -70,9 +70,22 @@
 <script src="js/fx.js"></script>
 <script src="js/game.js"></script>
 <script>
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", function () {
-    navigator.serviceWorker.register("sw.js").catch(function () {});
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async function () {
+    try {
+      // Unregister any existing service workers and clear caches to avoid stale
+      // workers serving a blank or cached response after we fixed index.html.
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+      console.log('Service workers unregistered and caches cleared');
+    } catch (e) {
+      // Ignore errors — best-effort cleanup
+      console.warn('SW cleanup failed', e);
+    }
+    // Optional: register a new service worker only if you intend to use one.
+    // navigator.serviceWorker.register('sw.js').catch(()=>{});
   });
 }
 </script>
