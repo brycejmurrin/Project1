@@ -15,6 +15,12 @@
   const titleEl = document.getElementById("title");
   const subtitleEl = document.getElementById("subtitle");
   const promptEl = document.getElementById("prompt");
+  const pauseBtn = document.getElementById("pausebtn");
+  const pauseMenu = document.getElementById("pausemenu");
+  const pmResume = document.getElementById("pm-resume");
+  const pmRestart = document.getElementById("pm-restart");
+  const pmSound = document.getElementById("pm-sound");
+  const pmQuit = document.getElementById("pm-quit");
 
   let glOk = false;
   try {
@@ -58,6 +64,8 @@
   let nextExtra = 20000;
   let DP = Difficulty.params(); // active difficulty tuning
   let lbEntryActive = false;    // leaderboard initials UI is up
+  let paused = false;
+  let pauseBtnShown = false;
 
   // --- Player ---------------------------------------------------------------
   const player = {
@@ -583,7 +591,7 @@
   }
 
   function fireMissile() {
-    if (!player.alive || !playableInput()) return;
+    if (paused || !player.alive || !playableInput()) return;
     const cap = player.dual ? 4 : 2;
     if (player.dual) {
       let room = cap - missiles.length;
@@ -1093,6 +1101,58 @@
     Renderer.flush();
   }
 
+  // --- Pause ----------------------------------------------------------------------
+  function inRun() {
+    return state !== ST.ATTRACT && state !== ST.OVER;
+  }
+
+  function setPaused(p) {
+    if (p === paused || (p && !inRun())) return;
+    paused = p;
+    pauseMenu.hidden = !p;
+    if (p) {
+      GameAudio.tractorOff();
+      pmSound.textContent = "SOUND: " + (GameAudio.muted ? "OFF" : "ON");
+    } else {
+      // Restore the beam hum if a boss was mid-beam when we paused.
+      for (const e of enemies) {
+        if (e.alive && e.state === "beam") { GameAudio.tractorOn(); break; }
+      }
+    }
+  }
+
+  function quitToMenu() {
+    setPaused(false);
+    GameAudio.tractorOff();
+    enemies = [];
+    missiles = [];
+    bullets = [];
+    explosions = [];
+    rescueShip = null;
+    lostShip = null;
+    captureBoss = null;
+    try { localStorage.setItem(HI_KEY, String(hiscore)); } catch (e) { /* ok */ }
+    goAttract();
+  }
+
+  pauseBtn.addEventListener("click", function () { setPaused(!paused); });
+  pmResume.addEventListener("click", function () { setPaused(false); });
+  pmRestart.addEventListener("click", function () {
+    setPaused(false);
+    startGame();
+  });
+  pmSound.addEventListener("click", function () {
+    GameAudio.setMuted(!GameAudio.muted);
+    pmSound.textContent = "SOUND: " + (GameAudio.muted ? "OFF" : "ON");
+  });
+  pmQuit.addEventListener("click", quitToMenu);
+
+  if (typeof document.addEventListener === "function") {
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden && inRun() && !paused) setPaused(true);
+    });
+  }
+
   // --- Input ----------------------------------------------------------------------
   function startFromUI() {
     if (lbEntryActive) return false;
@@ -1110,6 +1170,7 @@
   canvas.addEventListener("pointerdown", function (e) {
     e.preventDefault();
     GameAudio.unlock();
+    if (paused) return;
     if (startFromUI()) return;
     if (playableInput()) {
       dragging = true;
@@ -1137,6 +1198,11 @@
 
   window.addEventListener("keydown", function (e) {
     GameAudio.unlock();
+    if (e.code === "Escape" || e.code === "KeyP") {
+      setPaused(!paused);
+      return;
+    }
+    if (paused) return;
     if (e.code === "ArrowLeft" || e.code === "KeyA") keys.left = true;
     if (e.code === "ArrowRight" || e.code === "KeyD") keys.right = true;
     if (e.code === "Space" || e.code === "Enter") {
@@ -1162,6 +1228,13 @@
   });
 
   // --- Boot ------------------------------------------------------------------------
+  // Unlock audio on the first gesture of ANY kind, in the capture phase, so
+  // UI layers that stop propagation (menu, leaderboard) can't starve it.
+  // iOS is picky about which events count; touchend/click are the safest.
+  ["pointerdown", "touchend", "mousedown", "click", "keydown"].forEach(function (ev) {
+    window.addEventListener(ev, function () { GameAudio.unlock(); }, true);
+  });
+
   const savedTheme = localStorage.getItem(THEME_KEY);
   if (savedTheme && Sprites.setPlayerTheme) Sprites.setPlayerTheme(savedTheme);
 
@@ -1175,8 +1248,13 @@
   function frame(now) {
     const dt = Math.min((now - lastTime) / 1000, 1 / 20);
     lastTime = now;
-    update(dt);
+    if (!paused) update(dt);
     render();
+    const showPause = inRun() && !lbEntryActive;
+    if (showPause !== pauseBtnShown) {
+      pauseBtnShown = showPause;
+      pauseBtn.hidden = !showPause;
+    }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(function (now) {

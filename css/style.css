@@ -119,6 +119,73 @@ html, body {
   50% { opacity: 0.35; }
 }
 
+#pausebtn[hidden],
+#pausemenu[hidden] {
+  display: none;
+}
+
+#pausebtn {
+  position: fixed;
+  top: calc(48px + env(safe-area-inset-top));
+  right: 10px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(10, 14, 30, 0.55);
+  border: 1px solid rgba(64, 224, 255, 0.5);
+  color: #aee9ff;
+  font-size: 13px;
+  font-family: inherit;
+  z-index: 5;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#pausebtn:active {
+  transform: scale(0.94);
+}
+
+#pausemenu {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(5, 6, 15, 0.82);
+  z-index: 6;
+  padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom);
+}
+
+#pausemenu h2 {
+  color: #40e0ff;
+  letter-spacing: 6px;
+  font-size: 30px;
+  font-weight: 800;
+  text-shadow: 0 0 18px rgba(64, 224, 255, 0.8);
+  margin-bottom: 10px;
+}
+
+#pausemenu button {
+  min-width: 230px;
+  min-height: 52px;
+  background: rgba(10, 14, 30, 0.7);
+  border: 1px solid rgba(64, 224, 255, 0.6);
+  border-radius: 8px;
+  color: #fff;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#pausemenu button:active {
+  transform: scale(0.96);
+}
+
 #nogl[hidden] {
   display: none;
 }

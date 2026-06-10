@@ -30,6 +30,12 @@ const GameAudio = (function () {
             (window.AudioContext || window.webkitAudioContext)) ||
           null;
         if (!AC) return;
+        // iOS 17+: play through the ring/silent switch like a game should.
+        try {
+          if (typeof navigator !== "undefined" && navigator.audioSession) {
+            navigator.audioSession.type = "playback";
+          }
+        } catch (e) { /* older iOS */ }
         ctx = new AC();
 
         master = ctx.createGain();
@@ -38,8 +44,9 @@ const GameAudio = (function () {
 
         noiseBuffer = makeNoiseBuffer();
       }
-      // iOS Safari starts contexts suspended; resume inside the gesture.
-      if (ctx.state === "suspended" && typeof ctx.resume === "function") {
+      // iOS Safari starts contexts suspended (or leaves them "interrupted"
+      // after backgrounding); resume inside the gesture.
+      if (ctx.state !== "running" && typeof ctx.resume === "function") {
         ctx.resume();
       }
     } catch (e) {
