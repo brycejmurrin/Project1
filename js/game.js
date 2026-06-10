@@ -23,6 +23,7 @@
   const pmQuit = document.getElementById("pm-quit");
   const pmMusic = document.getElementById("pm-music");
   const fireBtn = document.getElementById("firebtn");
+  const weaponHudEl = document.getElementById("weapon-hud");
 
   let glOk = false;
   try {
@@ -110,7 +111,9 @@
   let moveStartTarget = 0;
   let fireHeld = false;
   let fireCd = 0;
-  const FIRE_INTERVAL = 0.17; // seconds between autofire shots
+  const FIRE_INTERVAL = 0.13; // seconds between autofire shots
+  const FIRE_INTERVAL_RAPID = 0.065;
+  const SPREAD_VX = 195; // px/s horizontal for spread side shots
 
   // Touch drag sensitivity (ship px per finger px), selectable in the menu.
   const SENS_KEY = "touch-sens";
@@ -132,6 +135,9 @@
   let musicPref = true;
   try { musicPref = localStorage.getItem(MUSIC_KEY) !== "off"; } catch (e) { /* ok */ }
 
+  let powerups = []; // {x, y, type, t}  "spread" | "rapid"
+  let weaponType = "normal";
+  let weaponAmmo = 0;
   let shakeT = 0;
 
   // --- Stars -----------------------------------------------------------------
@@ -316,6 +322,7 @@
     lives = DP.startLives;
     nextExtra = DP.extraLifeFirst;
     player.dual = false;
+    weaponType = "normal"; weaponAmmo = 0; powerups = []; updateWeaponHud();
     GameAudio.coin();
     goIntro();
   }
@@ -465,6 +472,7 @@
     explosions.push({ x: player.x, y: player.y, t: 0, big: true });
     GameAudio.playerExplode();
     shakeT = 0.5;
+    weaponType = "normal"; weaponAmmo = 0; powerups = []; updateWeaponHud();
     player.alive = false;
     retreatDivers();
     state = ST.DYING;
@@ -593,6 +601,13 @@
     Fx.popup(e.x, e.y, pts);
     if (e.kind === "boss") Fx.flash(1);
     if (e.state === "beam") GameAudio.tractorOff();
+    if (state !== ST.CHALLENGE) {
+      if (e.kind === "boss" && Math.random() < 0.5) {
+        powerups.push({ x: e.x, y: e.y, type: "spread", t: 0 });
+      } else if (e.kind === "butterfly" && Math.random() < 0.2) {
+        powerups.push({ x: e.x, y: e.y, type: "rapid", t: 0 });
+      }
+    }
     if (e.captured) {
       if (e.state === "formation") {
         // Captured fighter escapes upward, lost for good.
@@ -624,31 +639,70 @@
       fireCd -= dt;
       if (fireCd <= 0) {
         fireMissile();
-        fireCd = FIRE_INTERVAL;
+        fireCd = currentFireInterval();
       }
+    }
+  }
+
+  function currentFireInterval() {
+    return weaponType === "rapid" ? FIRE_INTERVAL_RAPID : FIRE_INTERVAL;
+  }
+
+  function updateWeaponHud() {
+    if (weaponType === "normal") {
+      weaponHudEl.hidden = true;
+    } else {
+      weaponHudEl.hidden = false;
+      const label = weaponType === "rapid" ? "RAPID" : "SPREAD";
+      weaponHudEl.textContent = label + " ×" + weaponAmmo;
+      weaponHudEl.style.color = weaponType === "rapid" ? "#35e0e0" : "#f0b429";
+      weaponHudEl.style.textShadow = weaponType === "rapid"
+        ? "0 0 8px rgba(53,224,224,0.8)"
+        : "0 0 8px rgba(240,180,41,0.8)";
     }
   }
 
   function fireMissile() {
     if (paused || !player.alive || !playableInput()) return;
-    const cap = player.dual ? 4 : 2;
+
+    if (weaponType === "spread") {
+      const origins = player.dual
+        ? [player.x - DUAL_GAP / 2, player.x + DUAL_GAP / 2]
+        : [player.x];
+      for (const ox of origins) {
+        missiles.push({ x: ox, y: player.y - 16, vx: -SPREAD_VX });
+        missiles.push({ x: ox, y: player.y - 16, vx: 0 });
+        missiles.push({ x: ox, y: player.y - 16, vx: SPREAD_VX });
+      }
+      GameAudio.shoot();
+      if (--weaponAmmo <= 0) { weaponType = "normal"; weaponAmmo = 0; }
+      updateWeaponHud();
+      return;
+    }
+
+    const rapidMod = weaponType === "rapid";
+    const cap = player.dual ? 6 : (rapidMod ? 4 : 2);
     if (player.dual) {
-      let room = cap - missiles.length;
-      if (room >= 1) missiles.push({ x: player.x - DUAL_GAP / 2, y: player.y - 16 });
-      if (room >= 2) missiles.push({ x: player.x + DUAL_GAP / 2, y: player.y - 16 });
+      const room = cap - missiles.length;
+      if (room >= 1) missiles.push({ x: player.x - DUAL_GAP / 2, y: player.y - 16, vx: 0 });
+      if (room >= 2) missiles.push({ x: player.x + DUAL_GAP / 2, y: player.y - 16, vx: 0 });
       if (room >= 1) GameAudio.shoot();
     } else {
       if (missiles.length < cap) {
-        missiles.push({ x: player.x, y: player.y - 16 });
+        missiles.push({ x: player.x, y: player.y - 16, vx: 0 });
         GameAudio.shoot();
       }
     }
+    if (rapidMod && --weaponAmmo <= 0) { weaponType = "normal"; weaponAmmo = 0; }
+    if (rapidMod) updateWeaponHud();
   }
 
   function updateMissiles(dt) {
     for (let i = missiles.length - 1; i >= 0; i--) {
-      missiles[i].y -= 760 * dt;
-      if (missiles[i].y < -20) missiles.splice(i, 1);
+      const m = missiles[i];
+      if (m.vx) m.x += m.vx * dt;
+      m.y -= 760 * dt;
+      if (m.y < -20 || m.x < -20 || m.x > W() + 20) missiles.splice(i, 1);
     }
   }
 
@@ -976,6 +1030,23 @@
     }
   }
 
+  function updatePowerups(dt) {
+    for (let i = powerups.length - 1; i >= 0; i--) {
+      const p = powerups[i];
+      p.y += 70 * dt;
+      p.t += dt;
+      if (player.alive && Math.hypot(p.x - player.x, p.y - player.y) < 22) {
+        weaponType = p.type;
+        weaponAmmo = p.type === "rapid" ? 80 : 25;
+        Fx.flash(0.5);
+        updateWeaponHud();
+        powerups.splice(i, 1);
+      } else if (p.y > H() + 20) {
+        powerups.splice(i, 1);
+      }
+    }
+  }
+
   // --- Master update ----------------------------------------------------------------
   function update(dt) {
     formT += dt;
@@ -1017,6 +1088,7 @@
         else if (state === ST.COMBAT) updateCombat(dt);
         else updateChallenge(dt);
         collide();
+        updatePowerups(dt);
         if (state !== ST.CHALLENGE && enemies.length && allDead()) goClear();
         return;
       }
@@ -1115,6 +1187,14 @@
 
     for (const b of bullets) Sprites.enemyBullet(b.x, b.y, b.phase);
     for (const m of missiles) Sprites.playerMissile(m.x, m.y);
+    for (const p of powerups) {
+      const pulse = 0.8 + 0.2 * Math.sin(p.t * 9);
+      const color = p.type === "rapid"
+        ? [0.25, 0.88, 1, pulse]
+        : [1, 0.75, 0.12, pulse];
+      Renderer.rotQuad(p.x, p.y, 13, 13, p.t * 3, color);
+      Renderer.rotQuad(p.x, p.y, 7, 7, -p.t * 5, [1, 1, 1, pulse * 0.6]);
+    }
 
     // Player (blinks while invulnerable).
     const drawPlayer =
@@ -1185,6 +1265,8 @@
     missiles = [];
     bullets = [];
     explosions = [];
+    powerups = [];
+    weaponType = "normal"; weaponAmmo = 0; updateWeaponHud();
     rescueShip = null;
     lostShip = null;
     captureBoss = null;
@@ -1273,7 +1355,7 @@
     GameAudio.unlock();
     if (paused) return;
     fireHeld = true;
-    fireCd = FIRE_INTERVAL;
+    fireCd = currentFireInterval();
     fireMissile();
     try { fireBtn.setPointerCapture(e.pointerId); } catch (err) { /* ok */ }
   });
@@ -1300,7 +1382,7 @@
       if (!startFromUI() && e.code === "Space") {
         if (!fireHeld) fireMissile();
         fireHeld = true;
-        fireCd = FIRE_INTERVAL;
+        fireCd = currentFireInterval();
       }
       e.preventDefault();
     }
