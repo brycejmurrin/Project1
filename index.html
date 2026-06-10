@@ -39,6 +39,7 @@
   <button id="pm-resume">RESUME</button>
   <button id="pm-restart">RESTART</button>
   <button id="pm-sound">SOUND: ON</button>
+  <button id="pm-music">MUSIC: ON</button>
   <button id="pm-quit">QUIT TO MENU</button>
 </div>
 
@@ -59,6 +60,14 @@
 <script src="js/difficulty.js"></script>
 <script src="js/menu.js"></script>
 <script src="js/leaderboard.js"></script>
+<script src="js/fx.js"></script>
 <script src="js/game.js"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("sw.js").catch(function () {});
+  });
+}
+</script>
 </body>
 </html>

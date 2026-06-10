@@ -652,11 +652,19 @@ const GameAudio = (function () {
     extraLife: guarded(extraLife),
     gameOver: guarded(gameOver),
     coin: guarded(coin),
+    musicOn: guarded(musicOn),
+    musicOff: guarded(musicOff),
   };
 
   Object.defineProperty(api, "muted", {
     get: function () {
       return isMuted;
+    },
+  });
+
+  Object.defineProperty(api, "musicPlaying", {
+    get: function () {
+      return !!music;
     },
   });
 

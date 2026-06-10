@@ -21,6 +21,7 @@
   const pmRestart = document.getElementById("pm-restart");
   const pmSound = document.getElementById("pm-sound");
   const pmQuit = document.getElementById("pm-quit");
+  const pmMusic = document.getElementById("pm-music");
   const fireBtn = document.getElementById("firebtn");
 
   let glOk = false;
@@ -107,9 +108,28 @@
   let movePointerId = null; // the touch that steers the ship
   let moveStartX = 0;
   let moveStartTarget = 0;
-  const DRAG_SENS = 1.5;    // ship px per finger px (relative drag)
   let fireHeld = false;
   let fireCd = 0;
+
+  // Touch drag sensitivity (ship px per finger px), selectable in the menu.
+  const SENS_KEY = "touch-sens";
+  const SENS_LEVELS = [
+    { id: "slow", name: "SLOW" },
+    { id: "normal", name: "NORMAL" },
+    { id: "fast", name: "FAST" },
+  ];
+  const SENS_VALUES = { slow: 1.0, normal: 1.5, fast: 2.2 };
+  let sensId = "normal";
+  try {
+    const s = localStorage.getItem(SENS_KEY);
+    if (s && SENS_VALUES[s]) sensId = s;
+  } catch (e) { /* private mode */ }
+  function dragSens() { return SENS_VALUES[sensId] || 1.5; }
+
+  // Background music preference (pause menu toggle).
+  const MUSIC_KEY = "music-pref";
+  let musicPref = true;
+  try { musicPref = localStorage.getItem(MUSIC_KEY) !== "off"; } catch (e) { /* ok */ }
 
   let shakeT = 0;
 
@@ -272,6 +292,14 @@
       difficulties: Difficulty.levels,
       getDifficulty: function () { return Difficulty.get(); },
       setDifficulty: function (id) { Difficulty.set(id); },
+      sensitivities: SENS_LEVELS,
+      getSensitivity: function () { return sensId; },
+      setSensitivity: function (id) {
+        if (SENS_VALUES[id]) {
+          sensId = id;
+          try { localStorage.setItem(SENS_KEY, id); } catch (e) { /* ok */ }
+        }
+      },
       getMuted: function () { return GameAudio.muted; },
       setMuted: function (m) { GameAudio.setMuted(m); },
     });
@@ -304,6 +332,8 @@
     player.alive = true;
     player.invuln = 0;
     player.x = player.targetX = W() / 2;
+    Fx.clear();
+    syncMusic();
     GameAudio.stageIntro();
     showOverlay(
       isChallengeStage() ? "CHALLENGING STAGE" : "STAGE " + stage,
@@ -370,6 +400,7 @@
       stateT = 0;
       try { localStorage.setItem(HI_KEY, String(hiscore)); } catch (e) { /* ok */ }
       GameAudio.gameOver();
+      syncMusic();
       if (Leaderboard.qualifies(score)) {
         showOverlay("GAME OVER", "SCORE  " + score, "", true);
         const finalScore = score;
@@ -556,7 +587,10 @@
     e.alive = false;
     explosions.push({ x: e.x, y: e.y, t: 0, big: e.kind === "boss" });
     GameAudio.enemyExplode(e.kind);
-    addScore(Math.round(enemyScore(e) * DP.scoreMul));
+    const pts = Math.round(enemyScore(e) * DP.scoreMul);
+    addScore(pts);
+    Fx.popup(e.x, e.y, pts);
+    if (e.kind === "boss") Fx.flash(1);
     if (e.state === "beam") GameAudio.tractorOff();
     if (e.captured) {
       if (e.state === "formation") {
@@ -841,6 +875,7 @@
         if (chWaveHits === 8) {
           chBonus += 1000;
           addScore(1000);
+          Fx.popup(W() / 2, H() * 0.4, 1000, [0.4, 1, 0.7, 1]);
           subtitleEl.textContent = "PERFECT WAVE  +1000";
           overlayEl.classList.remove("hidden");
           titleEl.textContent = "";
@@ -859,6 +894,7 @@
       if (chHits === 40) {
         addScore(10000);
         txt += "\nPERFECT!  +10000";
+        Fx.flash(1.5);
       }
       showOverlay("RESULTS", txt, "", false);
     }
@@ -882,7 +918,9 @@
               e.alive = false;
               explosions.push({ x: e.x, y: e.y, t: 0, big: false });
               GameAudio.enemyExplode(e.kind);
-              addScore(Math.round(100 * DP.scoreMul));
+              const chPts = Math.round(100 * DP.scoreMul);
+              addScore(chPts);
+              Fx.popup(e.x, e.y, chPts);
               chHits++;
               chWaveHits++;
             } else {
@@ -924,6 +962,7 @@
       if (player.alive && rescueShip.y >= player.y - 6) {
         player.dual = true;
         addScore(1000);
+        Fx.popup(player.x, player.y - 30, 1000, [0.4, 1, 0.7, 1]);
         GameAudio.rescue();
         rescueShip = null;
       } else if (rescueShip && rescueShip.y > H() + 30) {
@@ -951,6 +990,7 @@
     if (shakeT > 0) shakeT -= dt;
 
     updateExplosions(dt);
+    Fx.update(dt);
 
     switch (state) {
       case ST.ATTRACT:
@@ -1090,6 +1130,7 @@
     }
 
     for (const ex of explosions) Sprites.explosion(ex.x, ex.y, ex.t, ex.big);
+    Fx.draw();
 
     // Bottom HUD: reserve lives and stage flags.
     if (state !== ST.ATTRACT) {
@@ -1111,6 +1152,12 @@
     return state !== ST.ATTRACT && state !== ST.OVER;
   }
 
+  // Music plays during a run (unless turned off), never on menus or pause.
+  function syncMusic() {
+    if (musicPref && inRun() && !paused) GameAudio.musicOn();
+    else GameAudio.musicOff();
+  }
+
   function setPaused(p) {
     if (p === paused || (p && !inRun())) return;
     paused = p;
@@ -1118,17 +1165,21 @@
     if (p) {
       GameAudio.tractorOff();
       pmSound.textContent = "SOUND: " + (GameAudio.muted ? "OFF" : "ON");
+      pmMusic.textContent = "MUSIC: " + (musicPref ? "ON" : "OFF");
     } else {
       // Restore the beam hum if a boss was mid-beam when we paused.
       for (const e of enemies) {
         if (e.alive && e.state === "beam") { GameAudio.tractorOn(); break; }
       }
     }
+    syncMusic();
   }
 
   function quitToMenu() {
     setPaused(false);
     GameAudio.tractorOff();
+    GameAudio.musicOff();
+    Fx.clear();
     enemies = [];
     missiles = [];
     bullets = [];
@@ -1149,6 +1200,12 @@
   pmSound.addEventListener("click", function () {
     GameAudio.setMuted(!GameAudio.muted);
     pmSound.textContent = "SOUND: " + (GameAudio.muted ? "OFF" : "ON");
+  });
+  pmMusic.addEventListener("click", function () {
+    musicPref = !musicPref;
+    try { localStorage.setItem(MUSIC_KEY, musicPref ? "on" : "off"); } catch (e) { /* ok */ }
+    pmMusic.textContent = "MUSIC: " + (musicPref ? "ON" : "OFF");
+    syncMusic();
   });
   pmQuit.addEventListener("click", quitToMenu);
 
@@ -1191,7 +1248,7 @@
   canvas.addEventListener("pointermove", function (e) {
     if (e.pointerId === movePointerId) {
       e.preventDefault();
-      player.targetX = moveStartTarget + (e.clientX - moveStartX) * DRAG_SENS;
+      player.targetX = moveStartTarget + (e.clientX - moveStartX) * dragSens();
     }
   });
 
