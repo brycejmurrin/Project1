@@ -192,6 +192,9 @@ const Menu = (function () {
   let hiscoreValueEl = null;
   let swatchRowEl = null;
   let diffRowEl = null;
+  let diffSectionEl = null;
+  let sensSectionEl = null;
+  let sensRowEl = null;
   let soundBtnEl = null;
 
   function getOpt(name, fallback) {
@@ -271,16 +274,27 @@ const Menu = (function () {
     container.appendChild(shipSection);
 
     // 5. DIFFICULTY selector
-    const diffSection = document.createElement("div");
-    diffSection.className = "nsm-section";
+    diffSectionEl = document.createElement("div");
+    diffSectionEl.className = "nsm-section";
     const diffLabel = document.createElement("div");
     diffLabel.className = "nsm-label";
     diffLabel.textContent = "DIFFICULTY";
-    diffSection.appendChild(diffLabel);
+    diffSectionEl.appendChild(diffLabel);
     diffRowEl = document.createElement("div");
     diffRowEl.className = "nsm-seg-row";
-    diffSection.appendChild(diffRowEl);
-    container.appendChild(diffSection);
+    diffSectionEl.appendChild(diffRowEl);
+    container.appendChild(diffSectionEl);
+
+    // 5b. TOUCH SPEED selector (only attached when opts.sensitivities given)
+    sensSectionEl = document.createElement("div");
+    sensSectionEl.className = "nsm-section";
+    const sensLabel = document.createElement("div");
+    sensLabel.className = "nsm-label";
+    sensLabel.textContent = "TOUCH SPEED";
+    sensSectionEl.appendChild(sensLabel);
+    sensRowEl = document.createElement("div");
+    sensRowEl.className = "nsm-seg-row";
+    sensSectionEl.appendChild(sensRowEl);
 
     // 6. Bottom row: sound toggle + leaderboard
     const bottomRow = document.createElement("div");
@@ -382,6 +396,47 @@ const Menu = (function () {
     });
   }
 
+  function renderSensitivities() {
+    clearChildren(sensRowEl);
+    const senses = Array.isArray(opts.sensitivities) ? opts.sensitivities : [];
+
+    // Only render the row when sensitivities are provided.
+    if (senses.length === 0) {
+      if (sensSectionEl.parentNode) {
+        sensSectionEl.parentNode.removeChild(sensSectionEl);
+      }
+      return;
+    }
+    if (!sensSectionEl.parentNode) {
+      // Directly below the DIFFICULTY row.
+      container.insertBefore(sensSectionEl, diffSectionEl.nextSibling);
+    }
+
+    const getSensitivity = getOpt("getSensitivity", function () { return null; });
+    let current = null;
+    try { current = getSensitivity(); } catch (err) {}
+
+    senses.forEach(function (sens) {
+      if (!sens) return;
+      const id = sens.id;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className =
+        "nsm-btn nsm-seg" + (id === current ? " nsm-selected" : "");
+      btn.textContent = String(sens.name || id).toUpperCase();
+      btn.addEventListener("click", function () {
+        const setSensitivity = getOpt("setSensitivity", NOOP);
+        try { setSensitivity(id); } catch (err) {}
+        const kids = sensRowEl.children;
+        for (let i = 0; i < kids.length; i++) {
+          kids[i].classList.remove("nsm-selected");
+        }
+        btn.classList.add("nsm-selected");
+      });
+      sensRowEl.appendChild(btn);
+    });
+  }
+
   function refresh() {
     // High score (coerce defensively — only ever a number).
     const hi = Number(opts.hiscore);
@@ -389,6 +444,7 @@ const Menu = (function () {
 
     renderSwatches();
     renderDifficulties();
+    renderSensitivities();
 
     const getMuted = getOpt("getMuted", function () { return false; });
     let muted = false;
