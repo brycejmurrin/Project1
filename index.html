@@ -32,11 +32,6 @@
   </div>
 </div>
 
-<div id="zoom-controls">
-  <button id="zoom-in">Zoom In</button>
-  <button id="zoom-out">Zoom Out</button>
-</div>
-
 <button id="pausebtn" hidden>&#10074;&#10074;</button>
 <button id="firebtn" hidden>FIRE</button>
 <div id="pausemenu" hidden>
@@ -46,6 +41,12 @@
   <button id="pm-sound">SOUND: ON</button>
   <button id="pm-music">MUSIC: ON</button>
   <button id="pm-quit">QUIT TO MENU</button>
+
+  <!-- Zoom controls (iOS Safari style) — only visible in pause menu -->
+  <div class="pm-zoom">
+    <button id="pm-zoom-out" aria-label="Zoom out">−</button>
+    <button id="pm-zoom-in" aria-label="Zoom in">+</button>
+  </div>
 </div>
 
 <div id="overlay">
@@ -73,17 +74,6 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(function () {});
   });
 }
-
-// Zoom functionality
-let scale = 1.0;
-function zoom(scaleFactor) {
-  scale *= scaleFactor;
-  const gameCanvas = document.querySelector("#game");
-  gameCanvas.style.transform = `scale(${scale})`;
-}
-
-document.getElementById("zoom-in").addEventListener("click", () => zoom(1.1));
-document.getElementById("zoom-out").addEventListener("click", () => zoom(0.9));
 </script>
 </body>
 </html>
