@@ -1,0 +1,380 @@
+/*
+ * Sprite drawing for the Galaga-style game.
+ * Every function is pure drawing (no state): positioned by CENTER (x, y),
+ * built from Renderer.tri / Renderer.quad / Renderer.rotQuad.
+ *
+ * Local sprite space: x right, y DOWN (so -ly is toward the nose / "up"),
+ * units are pixels at scale 1. Angle 0 = facing up, positive = clockwise,
+ * matching the renderer's rotQuad convention.
+ */
+"use strict";
+
+const Sprites = (function () {
+  // ---------------------------------------------------------------------
+  // Shared helpers: place parts in sprite-local space, rotated by `angle`.
+  // ---------------------------------------------------------------------
+
+  // Rotate a local-space offset (lx, ly) clockwise by `angle` (screen coords,
+  // y down, so the standard rotation matrix gives clockwise rotation).
+  function rotX(lx, ly, c, s) { return lx * c - ly * s; }
+  function rotY(lx, ly, c, s) { return lx * s + ly * c; }
+
+  // Draw a rotated quad belonging to a sprite centered at (x, y) facing
+  // `angle`. (lx, ly) is the part's local offset, (w, h) its size, `rot`
+  // its own extra rotation, all scaled by `scale`.
+  function part(x, y, angle, scale, lx, ly, w, h, rot, color) {
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+    const px = x + rotX(lx * scale, ly * scale, c, s);
+    const py = y + rotY(lx * scale, ly * scale, c, s);
+    Renderer.rotQuad(px, py, w * scale, h * scale, rot + angle, color);
+  }
+
+  // Draw a triangle given three local-space vertices of a sprite centered
+  // at (x, y) facing `angle`.
+  function triPart(x, y, angle, scale, x1, y1, x2, y2, x3, y3, color) {
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+    Renderer.tri(
+      x + rotX(x1 * scale, y1 * scale, c, s), y + rotY(x1 * scale, y1 * scale, c, s),
+      x + rotX(x2 * scale, y2 * scale, c, s), y + rotY(x2 * scale, y2 * scale, c, s),
+      x + rotX(x3 * scale, y3 * scale, c, s), y + rotY(x3 * scale, y3 * scale, c, s),
+      color
+    );
+  }
+
+  function frac(v) {
+    return v - Math.floor(v);
+  }
+
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  // ---------------------------------------------------------------------
+  // Palette
+  // ---------------------------------------------------------------------
+  const WHITE = [1, 1, 1, 1];
+  const RED = [0.95, 0.2, 0.2, 1];
+  const BLUE = [0.3, 0.6, 1, 1];
+  const BEE_YELLOW = [1, 0.85, 0.2, 1];
+  const BEE_BLUE = [0.35, 0.5, 1, 1];
+  const FLY_RED = [0.95, 0.25, 0.3, 1];
+  const FLY_WHITE = [0.95, 0.95, 1, 1];
+  const BOSS_GREEN = [0.3, 0.9, 0.45, 1];
+  const BOSS_PURPLE = [0.75, 0.35, 0.95, 1];
+
+  // ---------------------------------------------------------------------
+  // 1. Player fighter (~30px tall at scale 1)
+  // ---------------------------------------------------------------------
+  function player(x, y, scale, angle) {
+    if (scale === undefined) scale = 1;
+    angle = angle || 0;
+    const a = angle, sc = scale;
+
+    // Soft glow halo under the whole ship.
+    part(x, y, a, sc, 0, 0, 28, 36, 0, [0.6, 0.7, 1, 0.13]);
+
+    // Central fuselage: needle nose down to the base.
+    triPart(x, y, a, sc, 0, -15, -3, -1, 3, -1, WHITE);     // nose cone
+    part(x, y, a, sc, 0, 5, 6, 13, 0, WHITE);               // hull body
+    triPart(x, y, a, sc, 0, -15, -1.2, -1, 1.2, -1, [1, 1, 1, 0.55]); // hot core
+
+    // Red side accents / stripes along the hull.
+    part(x, y, a, sc, -3.6, 5, 2, 11, 0, RED);
+    part(x, y, a, sc, 3.6, 5, 2, 11, 0, RED);
+    // Red chevron at the base of the nose.
+    triPart(x, y, a, sc, 0, -7, -2.4, -1, 2.4, -1, RED);
+
+    // Blue cockpit dot.
+    part(x, y, a, sc, 0, -2.5, 2.6, 3.2, 0, BLUE);
+
+    // Wings flaring out at the base.
+    triPart(x, y, a, sc, -3, 1, -11, 12, -3, 12, WHITE);
+    triPart(x, y, a, sc, 3, 1, 11, 12, 3, 12, WHITE);
+    // Red wing trim.
+    triPart(x, y, a, sc, -4.5, 7, -10, 11.5, -4.5, 11.5, RED);
+    triPart(x, y, a, sc, 4.5, 7, 10, 11.5, 4.5, 11.5, RED);
+
+    // Side cannons riding the wing tips.
+    part(x, y, a, sc, -9.2, 8, 2.4, 11, 0, WHITE);
+    part(x, y, a, sc, 9.2, 8, 2.4, 11, 0, WHITE);
+    part(x, y, a, sc, -9.2, 3.2, 1.4, 3, 0, RED);  // cannon tips
+    part(x, y, a, sc, 9.2, 3.2, 1.4, 3, 0, RED);
+
+    // Engine glow at the tail.
+    part(x, y, a, sc, 0, 12.5, 4, 3, 0, [0.4, 0.7, 1, 0.45]);
+  }
+
+  // ---------------------------------------------------------------------
+  // 2. Bee "Zako" (~22px at scale 1)
+  // ---------------------------------------------------------------------
+  function bee(x, y, scale, angle, wingPhase) {
+    if (scale === undefined) scale = 1;
+    angle = angle || 0;
+    wingPhase = wingPhase || 0;
+    const a = angle, sc = scale;
+    const flap = Math.sin(wingPhase);
+
+    // Glow halo.
+    part(x, y, a, sc, 0, 0, 24, 24, 0, [1, 0.8, 0.2, 0.12]);
+
+    // Wings: blue rotQuads angled out, flapping with wingPhase.
+    const wAng = 0.55 + 0.3 * flap;        // splay angle
+    const wLift = 1.5 * flap;              // bob up/down slightly
+    part(x, y, a, sc, -6.5, -2 - wLift, 4.5, 11, -wAng, BEE_BLUE);
+    part(x, y, a, sc, 6.5, -2 - wLift, 4.5, 11, wAng, BEE_BLUE);
+    // Faint inner wing highlight.
+    part(x, y, a, sc, -6, -2 - wLift, 2, 8, -wAng, [0.7, 0.8, 1, 0.5]);
+    part(x, y, a, sc, 6, -2 - wLift, 2, 8, wAng, [0.7, 0.8, 1, 0.5]);
+
+    // Body: two yellow segments (head + abdomen).
+    part(x, y, a, sc, 0, -4.5, 7, 6.5, 0, BEE_YELLOW);   // head/thorax
+    part(x, y, a, sc, 0, 3.5, 9, 9, 0, BEE_YELLOW);      // abdomen
+    // Blue stripe across the abdomen and tail tip.
+    part(x, y, a, sc, 0, 2.5, 9, 2, 0, BEE_BLUE);
+    part(x, y, a, sc, 0, 8.5, 5, 2.5, 0, BEE_BLUE);
+
+    // Eyes.
+    part(x, y, a, sc, -2, -5, 1.6, 1.8, 0, BEE_BLUE);
+    part(x, y, a, sc, 2, -5, 1.6, 1.8, 0, BEE_BLUE);
+
+    // Antennae poking up from the head.
+    part(x, y, a, sc, -2.5, -9, 1, 4, -0.35, BEE_BLUE);
+    part(x, y, a, sc, 2.5, -9, 1, 4, 0.35, BEE_BLUE);
+
+    // Little legs trailing below.
+    part(x, y, a, sc, -4, 9, 1, 3.5, -0.5, BEE_BLUE);
+    part(x, y, a, sc, 4, 9, 1, 3.5, 0.5, BEE_BLUE);
+  }
+
+  // ---------------------------------------------------------------------
+  // 3. Butterfly "Goei" (~24px at scale 1) — wider, white-dominant wings.
+  // ---------------------------------------------------------------------
+  function butterfly(x, y, scale, angle, wingPhase) {
+    if (scale === undefined) scale = 1;
+    angle = angle || 0;
+    wingPhase = wingPhase || 0;
+    const a = angle, sc = scale;
+    const flap = Math.sin(wingPhase);
+
+    // Glow halo.
+    part(x, y, a, sc, 0, 0, 30, 26, 0, [1, 0.5, 0.6, 0.12]);
+
+    // Big white wings, splayed wide, flapping.
+    const wAng = 0.75 + 0.28 * flap;
+    const wOut = 8.5 + 1.2 * flap;   // wings sweep in/out as they flap
+    part(x, y, a, sc, -wOut, -2, 7, 14, -wAng, FLY_WHITE);
+    part(x, y, a, sc, wOut, -2, 7, 14, wAng, FLY_WHITE);
+    // Lower hind wings.
+    part(x, y, a, sc, -6, 6, 5, 8, -wAng * 0.6, FLY_WHITE);
+    part(x, y, a, sc, 6, 6, 5, 8, wAng * 0.6, FLY_WHITE);
+    // Red wing tips.
+    part(x, y, a, sc, -wOut - 2.5, -6.5, 3.5, 5, -wAng, FLY_RED);
+    part(x, y, a, sc, wOut + 2.5, -6.5, 3.5, 5, wAng, FLY_RED);
+
+    // Red body down the middle.
+    part(x, y, a, sc, 0, 0, 5, 17, 0, FLY_RED);
+    triPart(x, y, a, sc, 0, -12, -2.5, -8, 2.5, -8, FLY_RED); // head point
+    // Pale belly stripe.
+    part(x, y, a, sc, 0, 1, 2, 12, 0, [1, 0.8, 0.85, 0.6]);
+
+    // Antennae.
+    part(x, y, a, sc, -2, -11, 0.9, 3.5, -0.4, FLY_RED);
+    part(x, y, a, sc, 2, -11, 0.9, 3.5, 0.4, FLY_RED);
+  }
+
+  // ---------------------------------------------------------------------
+  // 4. Boss Galaga (~28px at scale 1) — bulky; green, or purple when hit.
+  // ---------------------------------------------------------------------
+  function boss(x, y, scale, angle, wingPhase, damaged) {
+    if (scale === undefined) scale = 1;
+    angle = angle || 0;
+    wingPhase = wingPhase || 0;
+    const a = angle, sc = scale;
+    const flap = Math.sin(wingPhase);
+
+    const body = damaged ? BOSS_PURPLE : BOSS_GREEN;
+    const bodyDark = damaged ? [0.5, 0.2, 0.65, 1] : [0.18, 0.6, 0.3, 1];
+    const accent = damaged ? [0.95, 0.45, 0.85, 1] : BEE_BLUE;
+
+    // Glow halo.
+    part(x, y, a, sc, 0, 0, 34, 30, 0,
+      damaged ? [0.8, 0.4, 1, 0.14] : [0.4, 1, 0.55, 0.14]);
+
+    // Wings: blue (or pink when damaged) accents, flapping.
+    const wAng = 0.6 + 0.25 * flap;
+    const wOut = 10 + 1.3 * flap;
+    part(x, y, a, sc, -wOut, -3, 6, 13, -wAng, accent);
+    part(x, y, a, sc, wOut, -3, 6, 13, wAng, accent);
+    part(x, y, a, sc, -8, 6, 5, 8, -wAng * 0.55, accent);
+    part(x, y, a, sc, 8, 6, 5, 8, wAng * 0.55, accent);
+
+    // Bulky body: wide thorax + abdomen.
+    part(x, y, a, sc, 0, -4, 15, 9, 0, body);     // broad shoulders
+    part(x, y, a, sc, 0, 4, 11, 10, 0, body);     // abdomen
+    triPart(x, y, a, sc, -7.5, -8.5, 7.5, -8.5, 0, -13, body); // crown/head
+    // Darker segmentation bands.
+    part(x, y, a, sc, 0, 0.5, 13, 2, 0, bodyDark);
+    part(x, y, a, sc, 0, 9.5, 8, 2.5, 0, bodyDark);
+
+    // Yellow eyes.
+    part(x, y, a, sc, -3.8, -5.5, 2.6, 2.6, 0, [1, 0.9, 0.25, 1]);
+    part(x, y, a, sc, 3.8, -5.5, 2.6, 2.6, 0, [1, 0.9, 0.25, 1]);
+
+    // Antennae horns.
+    part(x, y, a, sc, -4, -13, 1.3, 4.5, -0.4, bodyDark);
+    part(x, y, a, sc, 4, -13, 1.3, 4.5, 0.4, bodyDark);
+  }
+
+  // ---------------------------------------------------------------------
+  // 5. Player missile: slim white-hot dart (~3x14) with cyan glow.
+  // ---------------------------------------------------------------------
+  function playerMissile(x, y) {
+    // Cyan glow underlay.
+    Renderer.rotQuad(x, y, 7, 18, 0, [0.3, 0.9, 1, 0.18]);
+    // Body.
+    Renderer.rotQuad(x, y + 1.5, 3, 11, 0, WHITE);
+    // Pointed tip.
+    Renderer.tri(x, y - 7, x - 1.5, y - 4, x + 1.5, y - 4, WHITE);
+    // Hot core stacked for extra brightness.
+    Renderer.rotQuad(x, y, 1.2, 12, 0, [1, 1, 1, 0.7]);
+  }
+
+  // ---------------------------------------------------------------------
+  // 6. Enemy bullet: small red/yellow projectile (~6px), pulsing.
+  // ---------------------------------------------------------------------
+  function enemyBullet(x, y, phase) {
+    phase = phase || 0;
+    const pulse = 0.5 + 0.5 * Math.sin(phase); // 0..1
+    // Glow.
+    Renderer.rotQuad(x, y, 11, 11, Math.PI / 4, [1, 0.3, 0.1, 0.10 + 0.10 * pulse]);
+    // Red diamond body.
+    Renderer.rotQuad(x, y, 6, 6, Math.PI / 4, [0.95, 0.25 + 0.15 * pulse, 0.1, 1]);
+    // Yellow hot core, brightness pulsing.
+    Renderer.rotQuad(x, y, 3, 3, Math.PI / 4, [1, 0.9, 0.3, 0.55 + 0.45 * pulse]);
+  }
+
+  // ---------------------------------------------------------------------
+  // 7. Explosion: expanding starburst, t in [0,1].
+  // ---------------------------------------------------------------------
+  function explosion(x, y, t, big) {
+    t = Math.min(Math.max(t || 0, 0), 1);
+    const arms = big ? 10 : 6;
+    const sizeMul = big ? 1.8 : 1;
+    const maxR = 26 * sizeMul;
+    const r = maxR * t;
+    const fade = 1 - t;
+
+    // Color shifts white -> yellow -> orange -> red as t advances.
+    let col;
+    if (t < 0.33) {
+      const k = t / 0.33;
+      col = [1, 1, lerp(1, 0.4, k), 1];                     // white -> yellow
+    } else if (t < 0.66) {
+      const k = (t - 0.33) / 0.33;
+      col = [1, lerp(1, 0.55, k), lerp(0.4, 0.1, k), 1];    // yellow -> orange
+    } else {
+      const k = (t - 0.66) / 0.34;
+      col = [lerp(1, 0.85, k), lerp(0.55, 0.15, k), 0.1, 1]; // orange -> red
+    }
+    const armCol = [col[0], col[1], col[2], fade];
+
+    // Central flash, biggest early on.
+    Renderer.rotQuad(x, y, 10 * sizeMul * fade + 2, 10 * sizeMul * fade + 2,
+      Math.PI / 4, [1, 1, 0.85, 0.6 * fade]);
+
+    // Radiating arms: elongated rotQuads pointing outward.
+    const len = 6 + r * 0.7;
+    const thick = (big ? 3.6 : 2.8) * (1 - t * 0.5);
+    for (let i = 0; i < arms; i++) {
+      const ang = (i / arms) * Math.PI * 2 + (big ? 0.25 : 0.5); // fixed offset
+      const dx = Math.sin(ang);
+      const dy = -Math.cos(ang);
+      const cx = x + dx * (r * 0.55 + len * 0.35);
+      const cy = y + dy * (r * 0.55 + len * 0.35);
+      // Faint wide glow under each arm, then the bright arm itself.
+      Renderer.rotQuad(cx, cy, thick * 3, len * 1.25, ang,
+        [col[0], col[1], col[2], 0.18 * fade]);
+      Renderer.rotQuad(cx, cy, thick, len, ang, armCol);
+    }
+
+    // Expanding faint ring: low-alpha tangential quads arranged in a circle.
+    const ringR = r * 1.15 + 3;
+    const segs = 14;
+    const segLen = (Math.PI * 2 * ringR) / segs * 1.15;
+    for (let i = 0; i < segs; i++) {
+      const ang = (i / segs) * Math.PI * 2;
+      const cx = x + Math.sin(ang) * ringR;
+      const cy = y - Math.cos(ang) * ringR;
+      // Tangent direction = ring angle + 90deg.
+      Renderer.rotQuad(cx, cy, 1.6, segLen, ang + Math.PI / 2,
+        [1, 0.8, 0.5, 0.16 * fade]);
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // 8. Tractor beam: cone opening DOWNWARD from apex (x, y).
+  // ---------------------------------------------------------------------
+  function tractorBeam(x, y, height, phase) {
+    phase = phase || 0;
+    const halfW = height * 0.275; // full width at bottom = height * 0.55
+    const yb = y + height;
+
+    // Outer faint glow triangle, slightly wider.
+    Renderer.tri(x, y - 2, x - halfW * 1.35, yb + 3, x + halfW * 1.35, yb + 3,
+      [0.3, 0.7, 1, 0.07]);
+
+    // Layered translucent cone body (stacked = brighter toward the core).
+    Renderer.tri(x, y, x - halfW, yb, x + halfW, yb, [0.25, 0.6, 1, 0.16]);
+    Renderer.tri(x, y, x - halfW * 0.72, yb, x + halfW * 0.72, yb, [0.4, 0.85, 1, 0.14]);
+    Renderer.tri(x, y, x - halfW * 0.4, yb, x + halfW * 0.4, yb, [0.7, 0.95, 1, 0.12]);
+
+    // Bright apex spark.
+    Renderer.rotQuad(x, y + 2, 5, 5, Math.PI / 4, [0.8, 1, 1, 0.5]);
+
+    // Horizontal stripes sweeping downward (wrapping) — the pulsing beam.
+    const stripes = 5;
+    for (let i = 0; i < stripes; i++) {
+      const f = frac(phase / (Math.PI * 2) + i / stripes); // 0..1 down the cone
+      const sy = y + f * height;
+      const sw = 2 * halfW * f * 0.92;            // stripe width follows cone
+      if (sw < 1) continue;
+      const alpha = 0.45 * (0.35 + 0.65 * Math.sin(f * Math.PI)); // ease in/out
+      Renderer.quad(x - sw / 2, sy - 1.5, sw, 3, [0.55, 0.95, 1, alpha]);
+      // Thin hot line inside each stripe.
+      Renderer.quad(x - sw / 2, sy - 0.5, sw, 1, [0.9, 1, 1, alpha * 0.8]);
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // 9. Stage flag badge (~12px tall at scale 1) for the HUD.
+  // ---------------------------------------------------------------------
+  function flag(x, y, scale) {
+    if (scale === undefined) scale = 1;
+    const sc = scale;
+    const px = x - 3.5 * sc; // pole x
+
+    // Thin white pole.
+    Renderer.quad(px - 0.5 * sc, y - 6 * sc, 1 * sc, 12 * sc, [1, 1, 1, 0.9]);
+    // Red pennant streaming right from the pole top.
+    Renderer.tri(px, y - 6 * sc, px + 8.5 * sc, y - 3.25 * sc, px, y - 0.5 * sc, RED);
+    // Yellow inner band on the pennant.
+    Renderer.tri(px + 1 * sc, y - 5 * sc, px + 5.5 * sc, y - 3.25 * sc,
+      px + 1 * sc, y - 1.5 * sc, [1, 0.85, 0.25, 1]);
+    // Tiny base nub.
+    Renderer.quad(px - 1.5 * sc, y + 5 * sc, 3 * sc, 1 * sc, [1, 1, 1, 0.7]);
+  }
+
+  return {
+    player,
+    bee,
+    butterfly,
+    boss,
+    playerMissile,
+    enemyBullet,
+    explosion,
+    tractorBeam,
+    flag,
+  };
+})();
