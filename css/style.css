@@ -75,6 +75,7 @@ html, body {
   gap: 10px;
   justify-content: center;
   align-items: center;
+  width: 100%;
 }
 
 .pm-zoom button {
@@ -94,6 +95,8 @@ html, body {
   box-shadow: 0 6px 18px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.02);
   cursor: pointer;
   touch-action: manipulation;
+  pointer-events: auto;
+  z-index: 10001;
 }
 
 .pm-zoom button:active {
@@ -103,3 +106,24 @@ html, body {
 .pm-zoom button[aria-pressed="true"] {
   background: rgba(255,255,255,0.12);
 }
+
+/* Pause menu overlay: ensure it sits above the canvas and receives clicks */
+#pausemenu {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10000;
+  pointer-events: auto;
+  background: rgba(3, 5, 12, 0.65);
+  padding: 18px 22px;
+  border-radius: 12px;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  text-align: center;
+  min-width: 260px;
+}
+
+#pausemenu[hidden] { display: none; }
+#pausemenu:not([hidden]) { display: block; }
