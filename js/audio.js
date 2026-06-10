@@ -346,36 +346,50 @@ const GameAudio = (function () {
   // ---------------------------------------------------------------------
   // Background music loop
   //
-  // An original 8-bar chip-tune loop in A minor, driving at ~132 BPM:
-  //   Am | F | C | G | Am | F | Dm | E
-  // Voices: a kick thump on beats 1 & 3, a triangle bass pumping eighth
-  // notes with octave jumps, a dense square-wave 16th arpeggio (accented
-  // steps get a high octave echo), and a tick/hat pattern across the bar.
-  // Everything runs through its own bus gain into master, so setMuted
-  // still silences it. Notes are produced by a lookahead scheduler: a
-  // ~100ms setInterval that schedules ~300ms ahead of ctx.currentTime.
+  // An original, upbeat 8-bar chip-tune in C major at ~140 BPM:
+  //   C | G | Am | F | C | G | F | G
+  // Voices: a kick on beats 1 & 3 with snare/hat ticks, a bouncy
+  // root-fifth "oom-pah" triangle bass, an off-beat square pulse on the
+  // chord tones, and a bright square-wave lead playing a cheery original
+  // melody that climbs into the loop restart. Everything runs through
+  // its own bus gain into master, so setMuted still silences it. Notes
+  // are produced by a lookahead scheduler: a ~100ms setInterval that
+  // schedules ~300ms ahead of ctx.currentTime.
   // ---------------------------------------------------------------------
 
   const MUSIC_GAIN = 0.1; // music bus level into master
-  const MUSIC_STEP = 60 / 132 / 4; // one 16th note at 132 BPM (~0.114s)
+  const MUSIC_STEP = 60 / 140 / 4; // one 16th note at 140 BPM (~0.107s)
   const MUSIC_TOTAL_STEPS = 8 * 16; // 8 bars of 16 sixteenths
   const MUSIC_LOOKAHEAD = 0.3; // seconds scheduled ahead
   const MUSIC_TICK_MS = 100; // scheduler wakeup interval
 
-  // Per-bar chord table: bass root (midi) + four arpeggio tones (midi).
+  // Per-bar chord table: bass root (midi) + chord tones for the pulse.
   const MUSIC_CHORDS = [
-    { bass: 45, arp: [69, 72, 76, 81] }, // Am  (A4 C5 E5 A5)
-    { bass: 41, arp: [65, 69, 72, 77] }, // F   (F4 A4 C5 F5)
-    { bass: 48, arp: [64, 67, 72, 76] }, // C   (E4 G4 C5 E5)
-    { bass: 43, arp: [67, 71, 74, 79] }, // G   (G4 B4 D5 G5)
-    { bass: 45, arp: [69, 72, 76, 81] }, // Am
+    { bass: 36, arp: [64, 67, 72, 76] }, // C  (E4 G4 C5 E5)
+    { bass: 43, arp: [62, 67, 71, 74] }, // G  (D4 G4 B4 D5)
+    { bass: 45, arp: [64, 69, 72, 76] }, // Am (E4 A4 C5 E5)
+    { bass: 41, arp: [65, 69, 72, 77] }, // F  (F4 A4 C5 F5)
+    { bass: 36, arp: [64, 67, 72, 76] }, // C
+    { bass: 43, arp: [62, 67, 71, 74] }, // G
     { bass: 41, arp: [65, 69, 72, 77] }, // F
-    { bass: 50, arp: [65, 69, 74, 77] }, // Dm  (F4 A4 D5 F5)
-    { bass: 40, arp: [64, 68, 71, 76] }, // E   (E4 G#4 B4 E5)
+    { bass: 43, arp: [62, 67, 71, 74] }, // G
   ];
 
-  // Which 16ths of each bar the arpeggio plays (dense, driving).
-  const MUSIC_ARP_MASK = [1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1];
+  // Off-beat 16ths where the chord pulse plays (the "and"s, plus a pickup).
+  const MUSIC_ARP_MASK = [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1];
+
+  // Original lead melody, 8 bars x 16 sixteenth steps (midi, 0 = rest).
+  // Bright C-major tune with an ascending run into the loop restart.
+  const MUSIC_MELODY = [
+    [72, 0, 0, 0, 76, 0, 0, 0, 79, 0, 0, 76, 74, 0, 0, 0], // C
+    [74, 0, 0, 0, 71, 0, 0, 0, 74, 0, 0, 79, 74, 0, 71, 0], // G
+    [69, 0, 0, 0, 72, 0, 0, 0, 76, 0, 0, 72, 74, 0, 0, 0], // Am
+    [77, 0, 0, 0, 76, 0, 0, 0, 74, 0, 0, 72, 69, 0, 0, 0], // F
+    [72, 0, 0, 0, 76, 0, 0, 79, 84, 0, 0, 0, 79, 0, 0, 0], // C
+    [79, 0, 0, 76, 74, 0, 0, 0, 71, 0, 0, 74, 76, 0, 0, 0], // G
+    [77, 0, 0, 0, 81, 0, 0, 0, 79, 0, 0, 77, 76, 0, 0, 0], // F
+    [74, 0, 0, 76, 79, 0, 0, 0, 81, 0, 0, 83, 84, 0, 0, 0], // G (build-up)
+  ];
 
   // One oscillator note on the music bus, scheduled at absolute time `at`.
   function musicVoice(type, freq, at, dur, peak) {
@@ -447,24 +461,32 @@ const GameAudio = (function () {
       musicKickVoice(at);
     }
 
-    // Driving eighth-note bass, jumping up an octave on the off-eighths.
-    if (inBar % 2 === 0) {
-      const octave = (inBar / 2) % 2 === 1 ? 12 : 0;
-      musicVoice("triangle", mf(chord.bass + octave), at, MUSIC_STEP * 1.7, 0.45);
+    // Bouncy oom-pah bass: root on the beats, fifth on the off-eighths.
+    if (inBar % 4 === 0) {
+      musicVoice("triangle", mf(chord.bass), at, MUSIC_STEP * 1.6, 0.45);
+    } else if (inBar % 4 === 2) {
+      musicVoice("triangle", mf(chord.bass + 7), at, MUSIC_STEP * 1.2, 0.34);
     }
 
-    // Dense square arpeggio cycling up the chord tones; accented steps
-    // (beat starts) get a quiet high-octave echo for sparkle.
+    // Off-beat chord pulse cycling up the chord tones.
     if (MUSIC_ARP_MASK[inBar]) {
       let hit = 0;
       for (let i = 0; i < inBar; i++) {
         if (MUSIC_ARP_MASK[i]) hit++;
       }
-      const note = chord.arp[hit % chord.arp.length];
-      musicVoice("square", mf(note), at, MUSIC_STEP * 0.9, 0.22);
-      if (inBar % 4 === 0) {
-        musicVoice("square", mf(note + 12), at, MUSIC_STEP * 0.8, 0.1);
-      }
+      musicVoice(
+        "square",
+        mf(chord.arp[hit % chord.arp.length]),
+        at,
+        MUSIC_STEP * 0.9,
+        0.16
+      );
+    }
+
+    // Lead melody on top.
+    const note = MUSIC_MELODY[bar][inBar];
+    if (note) {
+      musicVoice("square", mf(note), at, MUSIC_STEP * 2.6, 0.26);
     }
 
     // Snare-ish accents on beats 2 and 4, soft hats on the other off-eighths.
