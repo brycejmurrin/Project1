@@ -13,7 +13,13 @@
   const subtitleEl = document.getElementById("subtitle");
   const promptEl = document.getElementById("prompt");
 
-  if (!Renderer.init(canvas)) {
+  let glOk = false;
+  try {
+    glOk = Renderer.init(canvas);
+  } catch (err) {
+    glOk = false;
+  }
+  if (!glOk) {
     document.getElementById("nogl").hidden = false;
     return;
   }
