@@ -38,13 +38,13 @@ html, body {
 }
 
 .hud-col {
-  min-width: 70px;
+  min-width: 64px;
 }
 
 .hud-label {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 2px;
+  letter-spacing: 1px;
   color: #ff3b4d;
   text-shadow: 0 0 8px rgba(255, 59, 77, 0.7);
   animation: blink1up 1.2s steps(2) infinite;
@@ -60,9 +60,9 @@ html, body {
 }
 
 .hud-value {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
-  letter-spacing: 2px;
+  letter-spacing: 1px;
   color: #ffffff;
   text-shadow: 0 0 8px rgba(160, 220, 255, 0.6);
 }
@@ -74,10 +74,10 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 10px;
   pointer-events: none;
   text-align: center;
-  padding: 0 24px;
+  padding: 0 20px;
   transition: opacity 0.25s ease;
 }
 
@@ -99,17 +99,17 @@ html, body {
 }
 
 #subtitle {
-  font-size: 16px;
-  letter-spacing: 2px;
+  font-size: 14px;
+  letter-spacing: 1px;
   color: #aee9ff;
   white-space: pre-line;
 }
 
 #prompt {
-  margin-top: 18px;
-  font-size: 17px;
+  margin-top: 10px;
+  font-size: 15px;
   font-weight: 700;
-  letter-spacing: 4px;
+  letter-spacing: 3px;
   color: #ffffff;
   animation: pulse 1.4s ease-in-out infinite;
 }
@@ -180,32 +180,32 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  background: rgba(5, 6, 15, 0.82);
+  gap: 10px;
+  background: rgba(5, 6, 15, 0.85);
   z-index: 6;
-  padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom);
+  padding: calc(env(safe-area-inset-top) + 10px) 20px calc(env(safe-area-inset-bottom) + 10px);
 }
 
 #pausemenu h2 {
   color: #40e0ff;
-  letter-spacing: 6px;
-  font-size: 30px;
+  letter-spacing: 5px;
+  font-size: 24px;
   font-weight: 800;
   text-shadow: 0 0 18px rgba(64, 224, 255, 0.8);
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 #pausemenu button {
-  min-width: 230px;
-  min-height: 52px;
+  min-width: min(210px, 80vw);
+  min-height: 46px;
   background: rgba(10, 14, 30, 0.7);
   border: 1px solid rgba(64, 224, 255, 0.6);
   border-radius: 8px;
   color: #fff;
   font-family: inherit;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: 3px;
+  letter-spacing: 2px;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
   -webkit-user-select: none;
@@ -217,12 +217,12 @@ html, body {
 
 #weapon-hud {
   position: fixed;
-  bottom: calc(104px + env(safe-area-inset-bottom));
+  bottom: calc(48px + env(safe-area-inset-bottom));
   left: 14px;
   font-family: "Courier New", ui-monospace, monospace;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 2px;
+  letter-spacing: 1px;
   pointer-events: none;
   z-index: 3;
   animation: pulse 0.6s ease-in-out infinite;
