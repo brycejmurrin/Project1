@@ -1232,13 +1232,14 @@
 
   // Movement: relative drag anywhere on the canvas (the finger doesn't have
   // to sit on the ship). One pointer steers; firing is the FIRE button's job,
-  // so a second thumb can hold fire simultaneously.
+  // so a second thumb can hold fire simultaneously. A new touch always takes
+  // over steering so a missed pointerup can never freeze the ship.
   canvas.addEventListener("pointerdown", function (e) {
     e.preventDefault();
     GameAudio.unlock();
     if (paused) return;
     if (startFromUI()) return;
-    if (playableInput() && movePointerId === null) {
+    if (playableInput()) {
       movePointerId = e.pointerId;
       moveStartX = e.clientX;
       moveStartTarget = player.targetX;
@@ -1254,12 +1255,17 @@
   });
 
   function endPointer(e) {
-    if (movePointerId === null || e.pointerId === movePointerId) {
+    if (movePointerId === null || !e || e.pointerId === movePointerId) {
       movePointerId = null;
     }
   }
   canvas.addEventListener("pointerup", endPointer);
   canvas.addEventListener("pointercancel", endPointer);
+  canvas.addEventListener("lostpointercapture", endPointer);
+  // Releases can land on overlays (pause menu, buttons) instead of the
+  // canvas; catch them at the window level in the capture phase.
+  window.addEventListener("pointerup", endPointer, true);
+  window.addEventListener("pointercancel", endPointer, true);
 
   // FIRE button: tap fires, hold autofires; independent of the move pointer.
   fireBtn.addEventListener("pointerdown", function (e) {
@@ -1278,6 +1284,7 @@
   }
   fireBtn.addEventListener("pointerup", endFire);
   fireBtn.addEventListener("pointercancel", endFire);
+  fireBtn.addEventListener("lostpointercapture", endFire);
   fireBtn.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 
   window.addEventListener("keydown", function (e) {

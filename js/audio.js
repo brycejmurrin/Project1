@@ -357,8 +357,8 @@ const GameAudio = (function () {
   // schedules ~300ms ahead of ctx.currentTime.
   // ---------------------------------------------------------------------
 
-  const MUSIC_GAIN = 0.1; // music bus level into master
-  const MUSIC_STEP = 60 / 140 / 4; // one 16th note at 140 BPM (~0.107s)
+  const MUSIC_GAIN = 0.12; // music bus level into master
+  const MUSIC_STEP = 60 / 150 / 4; // one 16th note at 150 BPM (0.1s)
   const MUSIC_TOTAL_STEPS = 8 * 16; // 8 bars of 16 sixteenths
   const MUSIC_LOOKAHEAD = 0.3; // seconds scheduled ahead
   const MUSIC_TICK_MS = 100; // scheduler wakeup interval
@@ -375,8 +375,8 @@ const GameAudio = (function () {
     { bass: 43, arp: [62, 67, 71, 74] }, // G
   ];
 
-  // Off-beat 16ths where the chord pulse plays (the "and"s, plus a pickup).
-  const MUSIC_ARP_MASK = [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1];
+  // 16ths where the chord pulse plays (dense off-beat drive plus pickups).
+  const MUSIC_ARP_MASK = [0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1];
 
   // Original lead melody, 8 bars x 16 sixteenth steps (midi, 0 = rest).
   // Bright C-major tune with an ascending run into the loop restart.
@@ -461,11 +461,13 @@ const GameAudio = (function () {
       musicKickVoice(at);
     }
 
-    // Bouncy oom-pah bass: root on the beats, fifth on the off-eighths.
+    // Bouncy oom-pah bass: root on the beats (with a gritty saw layer),
+    // fifth on the off-eighths.
     if (inBar % 4 === 0) {
       musicVoice("triangle", mf(chord.bass), at, MUSIC_STEP * 1.6, 0.45);
+      musicVoice("sawtooth", mf(chord.bass), at, MUSIC_STEP * 1.2, 0.14);
     } else if (inBar % 4 === 2) {
-      musicVoice("triangle", mf(chord.bass + 7), at, MUSIC_STEP * 1.2, 0.34);
+      musicVoice("triangle", mf(chord.bass + 7), at, MUSIC_STEP * 1.2, 0.36);
     }
 
     // Off-beat chord pulse cycling up the chord tones.
@@ -483,17 +485,20 @@ const GameAudio = (function () {
       );
     }
 
-    // Lead melody on top.
+    // Lead melody on top, fattened with a slightly detuned double.
     const note = MUSIC_MELODY[bar][inBar];
     if (note) {
-      musicVoice("square", mf(note), at, MUSIC_STEP * 2.6, 0.26);
+      musicVoice("square", mf(note), at, MUSIC_STEP * 2.6, 0.3);
+      musicVoice("square", mf(note) * 1.004, at, MUSIC_STEP * 2.4, 0.12);
     }
 
-    // Snare-ish accents on beats 2 and 4, soft hats on the other off-eighths.
+    // Snare accents on beats 2 and 4, hats driving all the other off-16ths.
     if (inBar === 4 || inBar === 12) {
-      musicTickVoice(at, 0.32, 3200);
+      musicTickVoice(at, 0.34, 3400);
     } else if (inBar % 4 === 2) {
-      musicTickVoice(at, 0.12, 5200);
+      musicTickVoice(at, 0.14, 5200);
+    } else if (inBar % 2 === 1) {
+      musicTickVoice(at, 0.07, 6500);
     }
   }
 
