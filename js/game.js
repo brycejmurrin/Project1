@@ -659,26 +659,15 @@
       comboTimer = COMBO_WINDOW;
       killStreak++;
       let drop = null;
-      // Only drop on exact milestones to avoid flooding.
-      if (comboCount === 15) {
-        drop = "bomb";
-        comboCount = 0; // restart the cycle
-      } else if (comboCount === 10) {
-        drop = pickRandom(["multi", "spread", "rapid"]);
-      } else if (comboCount === 5) {
-        drop = pickRandom(["spread", "rapid"]);
-      } else {
-        // Base drop by enemy type between milestones — kept rare.
-        const r = Math.random();
-        if (e.kind === "boss" && r < 0.20) {
-          drop = pickRandom(["spread", "multi"]);
-        } else if (e.kind === "butterfly" && r < 0.05) {
-          drop = pickRandom(["rapid", "spread"]);
-        } else if (e.kind === "bee" && r < 0.015) {
-          drop = "rapid";
-        }
+      // One streak milestone: 12 rapid kills → weapon or bomb, then reset.
+      if (comboCount === 12) {
+        drop = Math.random() < 0.25 ? "bomb" : pickRandom(["spread", "rapid", "multi"]);
+        comboCount = 0;
+      } else if (e.kind === "boss" && Math.random() < 0.08) {
+        // Rare boss drop — only source of drops outside the streak milestone.
+        drop = pickRandom(["spread", "multi"]);
       }
-      if (drop && powerups.length < 4) {
+      if (drop && powerups.length < 2) {
         powerups.push({ x: e.x, y: e.y, type: drop, t: 0 });
       }
     }
