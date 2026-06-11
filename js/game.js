@@ -174,10 +174,10 @@
   const form = { cell: 30, rowH: 28, topY: 90 };
 
   function computeMetrics() {
-    // Scale sprites proportionally to viewport area. Reference is a small phone
-    // (280×600) so that a modern iPhone (~390×844) gets ~1.4× and sprites are
-    // large enough to read clearly on a handheld screen.
-    SCALE = Math.max(1.0, Math.min(2.0, Math.sqrt(W() * H() / (280 * 600))));
+    // Scale sprites proportionally to viewport area. Reference is a compact phone
+    // (310×680) so that a modern iPhone (~390×844) gets ~1.25× — large enough to
+    // read clearly without feeling oversized.
+    SCALE = Math.max(1.0, Math.min(1.9, Math.sqrt(W() * H() / (310 * 680))));
     PLAYER_R = Math.round(12 * SCALE);
     DUAL_GAP  = Math.round(24 * SCALE);
     form.cell = Math.min(Math.round(34 * SCALE), Math.floor(W() / 10.5));
@@ -552,6 +552,23 @@
     if (e.shots > 3) e.shots = 3;
     e.fireT = 0.15;
     e.offX = 0;
+    // Assign a shot personality for this dive.
+    const r = Math.random();
+    if (e.kind === "bee") {
+      e.shotKind = r < 0.60 ? "aimed" : r < 0.85 ? "scatter" : "snipe";
+    } else {
+      // Butterfly: normal aim, rapid burst, or scatter volley.
+      if (r < 0.45) {
+        e.shotKind = "aimed";
+      } else if (r < 0.80) {
+        e.shotKind = "aimed";
+        e.shots = Math.max(2, e.shots);
+        e.fireT = 0.09; // rapid burst
+      } else {
+        e.shotKind = "scatter";
+        e.shots = 1;
+      }
+    }
     GameAudio.dive();
   }
 
@@ -566,6 +583,10 @@
     e.shots = beam ? 0 : 2;
     e.fireT = 0.2;
     e.offX = 0;
+    if (!beam) {
+      const r = Math.random();
+      e.shotKind = r < 0.35 ? "triple" : r < 0.65 ? "heavy" : "aimed";
+    }
     GameAudio.dive();
     if (!beam) {
       // Butterfly escorts flank a raiding boss.
@@ -591,15 +612,31 @@
     const dx = player.x - e.x;
     const dy = player.y - e.y;
     const len = Math.max(1, Math.hypot(dx, dy));
-    const spread = rand(-30, 30);
     const sp = bulletSpeed();
-    bullets.push({
-      x: e.x,
-      y: e.y,
-      vx: (dx / len) * sp + spread,
-      vy: Math.max(120, (dy / len) * sp),
-      phase: rand(0, 6),
-    });
+    const nx = dx / len, ny = dy / len;
+    const kind = e.shotKind || "aimed";
+
+    function pushBullet(vx, vy, bsc) {
+      bullets.push({ x: e.x, y: e.y, vx, vy: Math.max(80, vy), phase: rand(0, 6), bsc: bsc || 1 });
+    }
+    function fanned(angles, mul, bsc) {
+      for (const a of angles) {
+        const ca = Math.cos(a), sa = Math.sin(a);
+        pushBullet((nx * ca - ny * sa) * sp * mul, (nx * sa + ny * ca) * sp * mul, bsc);
+      }
+    }
+
+    if (kind === "scatter") {
+      fanned([-0.22, 0, 0.22], 0.9, 0.85);
+    } else if (kind === "snipe") {
+      pushBullet(nx * sp * 1.75, ny * sp * 1.75, 0.6);
+    } else if (kind === "triple") {
+      fanned([-0.30, 0, 0.30], 1.0, 0.85);
+    } else if (kind === "heavy") {
+      pushBullet(nx * sp * 0.55 + rand(-10, 10), ny * sp * 0.55, 1.7);
+    } else {
+      pushBullet(nx * sp + rand(-30, 30), ny * sp, 1);
+    }
   }
 
   function beamGeometry(boss) {
@@ -623,21 +660,21 @@
       killStreak++;
       let drop = null;
       // Only drop on exact milestones to avoid flooding.
-      if (comboCount === 10) {
+      if (comboCount === 15) {
         drop = "bomb";
         comboCount = 0; // restart the cycle
-      } else if (comboCount === 6) {
+      } else if (comboCount === 10) {
         drop = pickRandom(["multi", "spread", "rapid"]);
-      } else if (comboCount === 3) {
+      } else if (comboCount === 5) {
         drop = pickRandom(["spread", "rapid"]);
       } else {
-        // Base drop by enemy type between milestones.
+        // Base drop by enemy type between milestones — kept rare.
         const r = Math.random();
-        if (e.kind === "boss" && r < 0.55) {
+        if (e.kind === "boss" && r < 0.20) {
           drop = pickRandom(["spread", "multi"]);
-        } else if (e.kind === "butterfly" && r < 0.18) {
+        } else if (e.kind === "butterfly" && r < 0.05) {
           drop = pickRandom(["rapid", "spread"]);
-        } else if (e.kind === "bee" && r < 0.07) {
+        } else if (e.kind === "bee" && r < 0.015) {
           drop = "rapid";
         }
       }
@@ -1272,7 +1309,7 @@
     if (rescueShip) Sprites.player(rescueShip.x, rescueShip.y, 0.85 * SCALE, 0);
     if (lostShip) Sprites.player(lostShip.x, lostShip.y, 0.7 * SCALE, Math.PI);
 
-    for (const b of bullets) Sprites.enemyBullet(b.x, b.y, b.phase, SCALE);
+    for (const b of bullets) Sprites.enemyBullet(b.x, b.y, b.phase, (b.bsc || 1) * SCALE);
     for (const m of missiles) Sprites.playerMissile(m.x, m.y, SCALE);
     for (const p of powerups) {
       const pulse = 0.8 + 0.2 * Math.sin(p.t * 9);
