@@ -75,10 +75,20 @@
     x: 0,
     targetX: 0,
     y: 0,
-    dual: false,
+    ships: 1, // fighters flying side by side (rescues stack, capped by lives)
     alive: true,
     invuln: 0,
   };
+
+  // X-offsets of each fighter relative to player.x, centered.
+  function shipOffsets() {
+    const n = player.ships;
+    const offs = [];
+    for (let i = 0; i < n; i++) offs.push((i - (n - 1) / 2) * DUAL_GAP);
+    return offs;
+  }
+
+  function maxShips() { return Math.max(1, lives); }
   let PLAYER_R = 12;
   let DUAL_GAP = 24;
   let SCALE = 1; // viewport-relative sprite/geometry scale
@@ -231,19 +241,33 @@
       });
     }
     for (let c = 2; c <= 7; c++) add("boss", 0, c, 2);
-    for (let r = 1; r <= 2; r++) for (let c = 1; c <= 8; c++) add("butterfly", r, c, 1);
-    for (let r = 3; r <= 4; r++) for (let c = 0; c <= 9; c++) add("bee", r, c, 1);
+    for (let r = 1; r <= 2; r++) for (let c = 1; c <= 8; c++) {
+      // Outer columns become tanky moths from stage 3.
+      const isMoth = stage >= 3 && (c === 1 || c === 8);
+      add(isMoth ? "moth" : "butterfly", r, c, isMoth ? 2 : 1);
+    }
+    for (let r = 3; r <= 4; r++) for (let c = 0; c <= 9; c++) {
+      // Outer columns become fast wasps from stage 2.
+      const isWasp = stage >= 2 && (c <= 1 || c >= 8);
+      add(isWasp ? "wasp" : "bee", r, c, 1);
+    }
   }
 
   function enemyRadius(e) {
-    const r = e.kind === "boss" ? 16 : e.kind === "butterfly" ? 14 : 13;
+    const r = e.kind === "boss" ? 16
+      : e.kind === "moth" ? 15
+      : e.kind === "butterfly" ? 14
+      : e.kind === "wasp" ? 11
+      : 13;
     return Math.round(r * SCALE);
   }
 
   function enemyScore(e) {
     const flying = e.state !== "formation";
     if (e.kind === "bee") return flying ? 100 : 50;
+    if (e.kind === "wasp") return flying ? 150 : 70;
     if (e.kind === "butterfly") return flying ? 160 : 80;
+    if (e.kind === "moth") return flying ? 250 : 120;
     return flying ? 400 : 150;
   }
 
@@ -334,7 +358,7 @@
     hiscoreEl.textContent = String(hiscore);
     lives = DP.startLives;
     nextExtra = DP.extraLifeFirst;
-    player.dual = false;
+    player.ships = 1;
     weaponType = "normal"; weaponAmmo = 0; powerups = []; updateWeaponHud();
     killStreak = 0; comboCount = 0; comboTimer = 0;
     GameAudio.coin();
@@ -475,11 +499,11 @@
   // --- Player hit / capture ----------------------------------------------------
   function playerHit(shipOffset) {
     if (player.invuln > 0 || !player.alive) return;
-    if (player.dual) {
-      // One ship of the pair explodes; keep fighting with the survivor.
+    if (player.ships > 1) {
+      // One fighter of the formation explodes; the rest keep fighting.
       explosions.push({ x: player.x + shipOffset, y: player.y, t: 0, big: false });
       GameAudio.enemyExplode("bee");
-      player.dual = false;
+      player.ships--;
       player.invuln = 1;
       return;
     }
@@ -496,6 +520,7 @@
 
   let captureBoss = null;
   let captureFrom = { x: 0, y: 0 };
+  let captureShips = 1; // formation size when the beam grabbed us
 
   function startCapture(boss) {
     GameAudio.tractorOff();
@@ -503,6 +528,7 @@
     captureBoss = boss;
     captureFrom.x = player.x;
     captureFrom.y = player.y;
+    captureShips = player.ships;
     boss.beamT = 0;
     state = ST.CAPTURED;
     stateT = 1.2;
@@ -513,8 +539,17 @@
     captureBoss.captured = true;
     bossLeave(captureBoss);
     captureBoss = null;
-    player.alive = false;
-    loseLife();
+    if (captureShips > 1) {
+      // The beam tore one fighter out of the formation; the rest fight on.
+      player.ships--;
+      player.alive = true;
+      player.invuln = 2;
+      state = ST.COMBAT;
+      diveT = diveInterval();
+    } else {
+      player.alive = false;
+      loseLife();
+    }
   }
 
   function bossLeave(boss) {
@@ -555,7 +590,18 @@
     e.offX = 0;
     // Assign a shot personality for this dive.
     const r = Math.random();
-    if (e.kind === "bee") {
+    if (e.kind === "wasp") {
+      // Wasps streak in much faster and snipe.
+      e.speed = diverSpeed() * rand(1.2, 1.5);
+      e.shots = Math.max(2, e.shots);
+      e.shotKind = r < 0.5 ? "snipe" : r < 0.8 ? "twin" : "aimed";
+    } else if (e.kind === "moth") {
+      // Moths drift slowly but blanket the screen with bullet rings.
+      e.speed = diverSpeed() * rand(0.7, 0.9);
+      e.shots = 2;
+      e.fireT = 0.3;
+      e.shotKind = r < 0.65 ? "ring" : "scatter";
+    } else if (e.kind === "bee") {
       if (r < 0.45) e.shotKind = "aimed";
       else if (r < 0.70) e.shotKind = "scatter";
       else if (r < 0.88) e.shotKind = "snipe";
@@ -634,6 +680,9 @@
 
     if (kind === "scatter") {
       fanned([-0.22, 0, 0.22], 0.9, 0.85);
+    } else if (kind === "ring") {
+      // Wide 5-bullet arc — a wall to weave through.
+      fanned([-0.55, -0.27, 0, 0.27, 0.55], 0.8, 0.8);
     } else if (kind === "twin") {
       // Two parallel bullets offset perpendicular to the aim direction.
       const off = 9 * SCALE;
@@ -720,7 +769,7 @@
     const keySpeed = 460;
     if (keys.left) player.targetX -= keySpeed * dt;
     if (keys.right) player.targetX += keySpeed * dt;
-    const margin = PLAYER_R + Math.round(8 * SCALE) + (player.dual ? DUAL_GAP / 2 : 0);
+    const margin = PLAYER_R + Math.round(8 * SCALE) + ((player.ships - 1) * DUAL_GAP) / 2;
     player.targetX = clamp(player.targetX, margin, W() - margin);
     player.x += (player.targetX - player.x) * Math.min(1, dt * 18);
     if (player.invuln > 0) player.invuln -= dt;
@@ -759,16 +808,16 @@
   function fireMissile() {
     if (paused || !player.alive || !playableInput()) return;
 
+    const muzzleY = player.y - Math.round(16 * SCALE);
+    const offs = shipOffsets();
+
     if (weaponType === "multi") {
       const MSPD = 760;
       const angles = [-0.40, -0.20, 0, 0.20, 0.40];
-      const origins = player.dual
-        ? [player.x - DUAL_GAP / 2, player.x + DUAL_GAP / 2]
-        : [player.x];
-      for (const ox of origins) {
+      for (const off of offs) {
         for (const a of angles) {
           missiles.push({
-            x: ox, y: player.y - Math.round(16 * SCALE),
+            x: player.x + off, y: muzzleY,
             vx: Math.sin(a) * MSPD,
             vy: -Math.cos(a) * MSPD,
           });
@@ -781,13 +830,10 @@
     }
 
     if (weaponType === "spread") {
-      const origins = player.dual
-        ? [player.x - DUAL_GAP / 2, player.x + DUAL_GAP / 2]
-        : [player.x];
-      for (const ox of origins) {
-        missiles.push({ x: ox, y: player.y - Math.round(16 * SCALE), vx: -SPREAD_VX });
-        missiles.push({ x: ox, y: player.y - Math.round(16 * SCALE), vx: 0 });
-        missiles.push({ x: ox, y: player.y - Math.round(16 * SCALE), vx: SPREAD_VX });
+      for (const off of offs) {
+        missiles.push({ x: player.x + off, y: muzzleY, vx: -SPREAD_VX });
+        missiles.push({ x: player.x + off, y: muzzleY, vx: 0 });
+        missiles.push({ x: player.x + off, y: muzzleY, vx: SPREAD_VX });
       }
       GameAudio.shoot();
       if (--weaponAmmo <= 0) { weaponType = "normal"; weaponAmmo = 0; }
@@ -796,18 +842,15 @@
     }
 
     const rapidMod = weaponType === "rapid";
-    const cap = player.dual ? 6 : (rapidMod ? 4 : 2);
-    if (player.dual) {
-      const room = cap - missiles.length;
-      if (room >= 1) missiles.push({ x: player.x - DUAL_GAP / 2, y: player.y - Math.round(16 * SCALE), vx: 0 });
-      if (room >= 2) missiles.push({ x: player.x + DUAL_GAP / 2, y: player.y - Math.round(16 * SCALE), vx: 0 });
-      if (room >= 1) GameAudio.shoot();
-    } else {
-      if (missiles.length < cap) {
-        missiles.push({ x: player.x, y: player.y - Math.round(16 * SCALE), vx: 0 });
-        GameAudio.shoot();
-      }
+    // Per-ship missile budget; extra headroom once you've stacked a formation.
+    const cap = player.ships * (rapidMod ? 4 : 2) + (player.ships > 1 ? 2 : 0);
+    let fired = false;
+    for (const off of offs) {
+      if (missiles.length >= cap) break;
+      missiles.push({ x: player.x + off, y: muzzleY, vx: 0 });
+      fired = true;
     }
+    if (fired) GameAudio.shoot();
     if (rapidMod && --weaponAmmo <= 0) { weaponType = "normal"; weaponAmmo = 0; }
     if (rapidMod) updateWeaponHud();
   }
@@ -923,7 +966,7 @@
         e.beamT -= dt;
         e.angle = 0;
         const g = beamGeometry(e);
-        if (player.alive && player.invuln <= 0 && !player.dual &&
+        if (player.alive && player.invuln <= 0 &&
             state === ST.COMBAT &&
             Math.abs(player.x - e.x) < g.bottomHalfW * 0.9) {
           startCapture(e);
@@ -998,15 +1041,19 @@
       if (divers < maxDivers()) {
         const pool = enemies.filter((e) => e.alive && e.state === "formation");
         if (pool.length) {
-          // Weighted pick: bees most often, but bosses dive far more than before.
+          // Weighted pick across all five kinds; falls back to any if absent.
           const r = Math.random();
-          let kind = r < 0.45 ? "bee" : r < 0.75 ? "butterfly" : "boss";
+          let kind = r < 0.30 ? "bee"
+            : r < 0.45 ? "wasp"
+            : r < 0.65 ? "butterfly"
+            : r < 0.75 ? "moth"
+            : "boss";
           let cands = pool.filter((e) => e.kind === kind);
           if (!cands.length) cands = pool;
           const e = cands[(Math.random() * cands.length) | 0];
           if (e.kind === "boss") {
             const beamActive = enemies.some((b) => b.alive && (b.state === "beam" || (b.beamDive && b.state === "diving")));
-            const beam = !player.dual && !beamActive && Math.random() < DP.beamChance;
+            const beam = !beamActive && Math.random() < DP.beamChance;
             startBossDive(e, beam);
           } else {
             startDive(e);
@@ -1017,7 +1064,7 @@
   }
 
   function updateChallenge(dt) {
-    const kinds = ["bee", "bee", "butterfly", "butterfly", "boss"];
+    const kinds = ["bee", "wasp", "butterfly", "moth", "boss"];
     if (chWave < 5) {
       if (chSpawnIdx < 8) {
         chSpawnT -= dt;
@@ -1107,9 +1154,7 @@
 
     // Bullets vs player.
     if (player.alive && player.invuln <= 0 && state !== ST.CHALLENGE) {
-      const centers = player.dual
-        ? [-DUAL_GAP / 2, DUAL_GAP / 2]
-        : [0];
+      const centers = shipOffsets();
       for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         for (const off of centers) {
@@ -1130,7 +1175,7 @@
       rescueShip.y += 130 * dt;
       rescueShip.x += (player.x - rescueShip.x) * Math.min(1, dt * 3);
       if (player.alive && rescueShip.y >= player.y - 6) {
-        player.dual = true;
+        if (player.ships < maxShips()) player.ships++;
         addScore(1000);
         Fx.popup(player.x, player.y - 30, 1000, [0.4, 1, 0.7, 1]);
         GameAudio.rescue();
@@ -1297,7 +1342,9 @@
     for (const e of enemies) {
       if (!e.alive || e.state === "wait") continue;
       if (e.kind === "bee") Sprites.bee(e.x, e.y, SCALE, e.angle, e.wingPhase);
+      else if (e.kind === "wasp") Sprites.wasp(e.x, e.y, SCALE, e.angle, e.wingPhase);
       else if (e.kind === "butterfly") Sprites.butterfly(e.x, e.y, SCALE, e.angle, e.wingPhase);
+      else if (e.kind === "moth") Sprites.moth(e.x, e.y, SCALE, e.angle, e.wingPhase);
       else Sprites.boss(e.x, e.y, SCALE, e.angle, e.wingPhase, e.hp <= 1);
       if (e.captured) {
         const rPulse = 0.55 + 0.45 * Math.sin(formT * 8);
@@ -1330,11 +1377,8 @@
       state !== ST.ATTRACT &&
       (player.invuln <= 0 || Math.floor(player.invuln * 10) % 2 === 0);
     if (drawPlayer) {
-      if (player.dual) {
-        Sprites.player(player.x - DUAL_GAP / 2, player.y, SCALE, 0);
-        Sprites.player(player.x + DUAL_GAP / 2, player.y, SCALE, 0);
-      } else {
-        Sprites.player(player.x, player.y, SCALE, 0);
+      for (const off of shipOffsets()) {
+        Sprites.player(player.x + off, player.y, SCALE, 0);
       }
     }
 

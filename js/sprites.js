@@ -261,6 +261,81 @@ const Sprites = (function () {
   }
 
   // ---------------------------------------------------------------------
+  // 3b. Wasp "Hornet" (~20px at scale 1) — slim orange dart, fast striker.
+  // ---------------------------------------------------------------------
+  function wasp(x, y, scale, angle, wingPhase) {
+    if (scale === undefined) scale = 1;
+    angle = angle || 0;
+    wingPhase = wingPhase || 0;
+    const a = angle, sc = scale;
+    const flap = Math.sin(wingPhase * 1.6); // fast angry buzz
+
+    const ORANGE = [1, 0.55, 0.15, 1];
+    const DARK = [0.3, 0.12, 0.05, 1];
+
+    // Glow halo.
+    part(x, y, a, sc, 0, 0, 22, 24, 0, [1, 0.5, 0.1, 0.12]);
+
+    // Swept-back wings, buzzing.
+    const wAng = 0.95 + 0.22 * flap;
+    part(x, y, a, sc, -5.5, 1, 3.5, 10, -wAng, [1, 0.78, 0.45, 0.85]);
+    part(x, y, a, sc, 5.5, 1, 3.5, 10, wAng, [1, 0.78, 0.45, 0.85]);
+
+    // Dart body: head spike, thorax, tapered stinger.
+    triPart(x, y, a, sc, 0, -11, -3, -2, 3, -2, ORANGE);
+    part(x, y, a, sc, 0, 1, 5.5, 7, 0, ORANGE);
+    triPart(x, y, a, sc, -3, 4, 3, 4, 0, 12, ORANGE);
+
+    // Dark stripes.
+    part(x, y, a, sc, 0, 1, 5.5, 1.6, 0, DARK);
+    part(x, y, a, sc, 0, 5.5, 4, 1.6, 0, DARK);
+
+    // Red eyes.
+    part(x, y, a, sc, -1.8, -4.5, 1.5, 1.7, 0, [0.95, 0.12, 0.12, 1]);
+    part(x, y, a, sc, 1.8, -4.5, 1.5, 1.7, 0, [0.95, 0.12, 0.12, 1]);
+  }
+
+  // ---------------------------------------------------------------------
+  // 3c. Moth "Phantom" (~26px at scale 1) — wide violet wings, tanky,
+  //     fires rings of bullets.
+  // ---------------------------------------------------------------------
+  function moth(x, y, scale, angle, wingPhase) {
+    if (scale === undefined) scale = 1;
+    angle = angle || 0;
+    wingPhase = wingPhase || 0;
+    const a = angle, sc = scale;
+    const flap = Math.sin(wingPhase * 0.8); // slow heavy beat
+
+    const VIOLET = [0.62, 0.38, 0.95, 1];
+    const PALE = [0.85, 0.75, 1, 1];
+
+    // Big glow halo.
+    part(x, y, a, sc, 0, 0, 32, 28, 0, [0.65, 0.4, 1, 0.14]);
+
+    // Broad rounded wings, slow flap.
+    const wAng = 0.55 + 0.3 * flap;
+    const wOut = 9 + 1.5 * flap;
+    part(x, y, a, sc, -wOut, -2.5, 8.5, 13, -wAng, VIOLET);
+    part(x, y, a, sc, wOut, -2.5, 8.5, 13, wAng, VIOLET);
+    part(x, y, a, sc, -6.5, 6, 6, 8, -wAng * 0.5, VIOLET);
+    part(x, y, a, sc, 6.5, 6, 6, 8, wAng * 0.5, VIOLET);
+    // Pale eye-spots on the forewings.
+    part(x, y, a, sc, -wOut - 1, -4, 3, 3, -wAng, PALE);
+    part(x, y, a, sc, wOut + 1, -4, 3, 3, wAng, PALE);
+
+    // Furry pale body.
+    part(x, y, a, sc, 0, -1, 5.5, 15, 0, PALE);
+    triPart(x, y, a, sc, 0, -12, -2.8, -8, 2.8, -8, PALE);
+    // Violet segment bands.
+    part(x, y, a, sc, 0, 1.5, 5.5, 1.8, 0, VIOLET);
+    part(x, y, a, sc, 0, 5.5, 4.5, 1.8, 0, VIOLET);
+
+    // Feathered antennae.
+    part(x, y, a, sc, -2.5, -11.5, 2, 4, -0.55, VIOLET);
+    part(x, y, a, sc, 2.5, -11.5, 2, 4, 0.55, VIOLET);
+  }
+
+  // ---------------------------------------------------------------------
   // 4. Boss Galaga (~28px at scale 1) — bulky; green, or purple when hit.
   // ---------------------------------------------------------------------
   function boss(x, y, scale, angle, wingPhase, damaged) {
@@ -444,6 +519,8 @@ const Sprites = (function () {
     playerThemes: THEMES.map(function (t) { return { id: t.id, name: t.name }; }),
     bee,
     butterfly,
+    wasp,
+    moth,
     boss,
     playerMissile,
     enemyBullet,
