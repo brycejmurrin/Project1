@@ -621,23 +621,28 @@
       comboTimer = COMBO_WINDOW;
       killStreak++;
       let drop = null;
-      if (comboCount >= 8) {
+      // Only drop on exact milestones to avoid flooding.
+      if (comboCount === 10) {
         drop = "bomb";
-      } else if (comboCount >= 5) {
+        comboCount = 0; // restart the cycle
+      } else if (comboCount === 6) {
         drop = pickRandom(["multi", "spread", "rapid"]);
-      } else if (comboCount >= 3) {
-        drop = pickRandom(["spread", "rapid", "multi"]);
+      } else if (comboCount === 3) {
+        drop = pickRandom(["spread", "rapid"]);
       } else {
+        // Base drop by enemy type between milestones.
         const r = Math.random();
         if (e.kind === "boss" && r < 0.55) {
-          drop = pickRandom(["spread", "multi", "bomb"]);
+          drop = pickRandom(["spread", "multi"]);
         } else if (e.kind === "butterfly" && r < 0.18) {
           drop = pickRandom(["rapid", "spread"]);
         } else if (e.kind === "bee" && r < 0.07) {
           drop = "rapid";
         }
       }
-      if (drop) powerups.push({ x: e.x, y: e.y, type: drop, t: 0 });
+      if (drop && powerups.length < 4) {
+        powerups.push({ x: e.x, y: e.y, type: drop, t: 0 });
+      }
     }
     if (e.captured) {
       if (e.state === "formation") {
