@@ -136,16 +136,21 @@
   let musicPref = true;
   try { musicPref = localStorage.getItem(MUSIC_KEY) !== "off"; } catch (e) { /* ok */ }
 
-  let powerups = []; // {x, y, type, t}  "spread" | "rapid"
+  let powerups = []; // {x, y, type, t}  "spread" | "rapid" | "multi" | "bomb"
   let weaponType = "normal";
   let weaponAmmo = 0;
   let shakeT = 0;
+  let killStreak = 0;
+  let comboCount = 0;
+  let comboTimer = 0;
+  const COMBO_WINDOW = 1.8;
 
   // --- Stars -----------------------------------------------------------------
   let stars = [];
 
   function rand(a, b) { return a + Math.random() * (b - a); }
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function pickRandom(arr) { return arr[(Math.random() * arr.length) | 0]; }
 
   function W() { return Renderer.width; }
   function H() { return Renderer.height; }
@@ -330,6 +335,7 @@
     nextExtra = DP.extraLifeFirst;
     player.dual = false;
     weaponType = "normal"; weaponAmmo = 0; powerups = []; updateWeaponHud();
+    killStreak = 0; comboCount = 0; comboTimer = 0;
     GameAudio.coin();
     goIntro();
   }
@@ -408,7 +414,7 @@
     lives--;
     if (lives > 0) {
       state = ST.READY;
-      stateT = 1.4;
+      stateT = 0.9;
       showOverlay("", "", "READY", false);
     } else {
       state = ST.OVER;
@@ -480,6 +486,7 @@
     GameAudio.playerExplode();
     shakeT = 0.5;
     weaponType = "normal"; weaponAmmo = 0; powerups = []; updateWeaponHud();
+    killStreak = 0; comboCount = 0; comboTimer = 0;
     player.alive = false;
     retreatDivers();
     state = ST.DYING;
@@ -513,7 +520,8 @@
     boss.state = "leaving";
     boss.path = Paths.exit(boss.x, boss.y, W(), H());
     boss.s = 0;
-    boss.speed = diverSpeed() * 0.8;
+    // Slow captured bosses so the rescue window is achievable.
+    boss.speed = diverSpeed() * (boss.captured ? 0.4 : 0.8);
   }
 
   // --- Enemy behaviors -----------------------------------------------------------
@@ -599,7 +607,7 @@
     return { top, height, bottomHalfW: height * 0.55 / 2 };
   }
 
-  function killEnemy(e, idx) {
+  function killEnemy(e, skipDrop) {
     e.alive = false;
     explosions.push({ x: e.x, y: e.y, t: 0, big: e.kind === "boss" });
     GameAudio.enemyExplode(e.kind);
@@ -608,12 +616,28 @@
     Fx.popup(e.x, e.y, pts);
     if (e.kind === "boss") Fx.flash(1);
     if (e.state === "beam") GameAudio.tractorOff();
-    if (state !== ST.CHALLENGE) {
-      if (e.kind === "boss" && Math.random() < 0.5) {
-        powerups.push({ x: e.x, y: e.y, type: "spread", t: 0 });
-      } else if (e.kind === "butterfly" && Math.random() < 0.2) {
-        powerups.push({ x: e.x, y: e.y, type: "rapid", t: 0 });
+    if (!skipDrop && state !== ST.CHALLENGE) {
+      comboCount++;
+      comboTimer = COMBO_WINDOW;
+      killStreak++;
+      let drop = null;
+      if (comboCount >= 8) {
+        drop = "bomb";
+      } else if (comboCount >= 5) {
+        drop = pickRandom(["multi", "spread", "rapid"]);
+      } else if (comboCount >= 3) {
+        drop = pickRandom(["spread", "rapid", "multi"]);
+      } else {
+        const r = Math.random();
+        if (e.kind === "boss" && r < 0.55) {
+          drop = pickRandom(["spread", "multi", "bomb"]);
+        } else if (e.kind === "butterfly" && r < 0.18) {
+          drop = pickRandom(["rapid", "spread"]);
+        } else if (e.kind === "bee" && r < 0.07) {
+          drop = "rapid";
+        }
       }
+      if (drop) powerups.push({ x: e.x, y: e.y, type: drop, t: 0 });
     }
     if (e.captured) {
       if (e.state === "formation") {
@@ -624,6 +648,22 @@
         rescueShip = { x: e.x, y: e.y - Math.round(22 * SCALE) };
       }
       e.captured = false;
+    }
+  }
+
+  function activateBomb() {
+    Fx.flash(1.5);
+    GameAudio.enemyExplode("boss");
+    bullets = [];
+    for (const e of enemies) {
+      if (!e.alive || e.state === "wait") continue;
+      if (e.kind === "boss") {
+        e.hp--;
+        if (e.hp <= 0) killEnemy(e, true);
+        else GameAudio.enemyHit();
+      } else {
+        killEnemy(e, true);
+      }
     }
   }
 
@@ -660,17 +700,42 @@
       weaponHudEl.hidden = true;
     } else {
       weaponHudEl.hidden = false;
-      const label = weaponType === "rapid" ? "RAPID" : "SPREAD";
+      const label = weaponType === "rapid" ? "RAPID" : weaponType === "multi" ? "MULTI" : "SPREAD";
       weaponHudEl.textContent = label + " ×" + weaponAmmo;
-      weaponHudEl.style.color = weaponType === "rapid" ? "#35e0e0" : "#f0b429";
-      weaponHudEl.style.textShadow = weaponType === "rapid"
+      const color = weaponType === "rapid" ? "#35e0e0" : weaponType === "multi" ? "#ff55cc" : "#f0b429";
+      const shadow = weaponType === "rapid"
         ? "0 0 8px rgba(53,224,224,0.8)"
-        : "0 0 8px rgba(240,180,41,0.8)";
+        : weaponType === "multi"
+          ? "0 0 8px rgba(255,85,204,0.8)"
+          : "0 0 8px rgba(240,180,41,0.8)";
+      weaponHudEl.style.color = color;
+      weaponHudEl.style.textShadow = shadow;
     }
   }
 
   function fireMissile() {
     if (paused || !player.alive || !playableInput()) return;
+
+    if (weaponType === "multi") {
+      const MSPD = 760;
+      const angles = [-0.40, -0.20, 0, 0.20, 0.40];
+      const origins = player.dual
+        ? [player.x - DUAL_GAP / 2, player.x + DUAL_GAP / 2]
+        : [player.x];
+      for (const ox of origins) {
+        for (const a of angles) {
+          missiles.push({
+            x: ox, y: player.y - Math.round(16 * SCALE),
+            vx: Math.sin(a) * MSPD,
+            vy: -Math.cos(a) * MSPD,
+          });
+        }
+      }
+      GameAudio.shoot();
+      if (--weaponAmmo <= 0) { weaponType = "normal"; weaponAmmo = 0; }
+      updateWeaponHud();
+      return;
+    }
 
     if (weaponType === "spread") {
       const origins = player.dual
@@ -707,8 +772,8 @@
   function updateMissiles(dt) {
     for (let i = missiles.length - 1; i >= 0; i--) {
       const m = missiles[i];
-      if (m.vx) m.x += m.vx * dt;
-      m.y -= 760 * dt;
+      m.x += (m.vx || 0) * dt;
+      m.y += m.vy !== undefined ? m.vy * dt : -760 * dt;
       if (m.y < -20 || m.x < -20 || m.x > W() + 20) missiles.splice(i, 1);
     }
   }
@@ -1043,10 +1108,14 @@
       p.y += 70 * dt;
       p.t += dt;
       if (player.alive && Math.hypot(p.x - player.x, p.y - player.y) < 22 * SCALE) {
-        weaponType = p.type;
-        weaponAmmo = p.type === "rapid" ? 80 : 25;
-        Fx.flash(0.5);
-        updateWeaponHud();
+        if (p.type === "bomb") {
+          activateBomb();
+        } else {
+          weaponType = p.type;
+          weaponAmmo = p.type === "rapid" ? 80 : p.type === "multi" ? 20 : 25;
+          Fx.flash(0.5);
+          updateWeaponHud();
+        }
         powerups.splice(i, 1);
       } else if (p.y > H() + 20) {
         powerups.splice(i, 1);
@@ -1096,6 +1165,7 @@
         else updateChallenge(dt);
         collide();
         updatePowerups(dt);
+        if (comboTimer > 0) { comboTimer -= dt; if (comboTimer <= 0) comboCount = 0; }
         if (state !== ST.CHALLENGE && enemies.length && allDead()) goClear();
         return;
       }
@@ -1186,7 +1256,11 @@
       if (e.kind === "bee") Sprites.bee(e.x, e.y, SCALE, e.angle, e.wingPhase);
       else if (e.kind === "butterfly") Sprites.butterfly(e.x, e.y, SCALE, e.angle, e.wingPhase);
       else Sprites.boss(e.x, e.y, SCALE, e.angle, e.wingPhase, e.hp <= 1);
-      if (e.captured) Sprites.player(e.x, e.y - Math.round(22 * SCALE), 0.7 * SCALE, Math.PI);
+      if (e.captured) {
+        const rPulse = 0.55 + 0.45 * Math.sin(formT * 8);
+        Renderer.rotQuad(e.x, e.y - Math.round(11 * SCALE), 24 * SCALE, 24 * SCALE, formT * 2, [0.1, 1, 0.3, rPulse * 0.65]);
+        Sprites.player(e.x, e.y - Math.round(22 * SCALE), 0.7 * SCALE, Math.PI);
+      }
     }
 
     if (rescueShip) Sprites.player(rescueShip.x, rescueShip.y, 0.85 * SCALE, 0);
@@ -1198,7 +1272,11 @@
       const pulse = 0.8 + 0.2 * Math.sin(p.t * 9);
       const color = p.type === "rapid"
         ? [0.25, 0.88, 1, pulse]
-        : [1, 0.75, 0.12, pulse];
+        : p.type === "multi"
+          ? [1, 0.3, 0.85, pulse]
+          : p.type === "bomb"
+            ? [1, 0.45, 0.1, pulse]
+            : [1, 0.75, 0.12, pulse]; // spread = gold
       Renderer.rotQuad(p.x, p.y, 13 * SCALE, 13 * SCALE, p.t * 3, color);
       Renderer.rotQuad(p.x, p.y, 7 * SCALE, 7 * SCALE, -p.t * 5, [1, 1, 1, pulse * 0.6]);
     }
@@ -1275,6 +1353,7 @@
     explosions = [];
     powerups = [];
     weaponType = "normal"; weaponAmmo = 0; updateWeaponHud();
+    killStreak = 0; comboCount = 0; comboTimer = 0;
     rescueShip = null;
     lostShip = null;
     captureBoss = null;
