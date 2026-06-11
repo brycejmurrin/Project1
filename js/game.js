@@ -230,7 +230,7 @@
         alive: true,
       });
     }
-    for (let c = 3; c <= 6; c++) add("boss", 0, c, 2);
+    for (let c = 2; c <= 7; c++) add("boss", 0, c, 2);
     for (let r = 1; r <= 2; r++) for (let c = 1; c <= 8; c++) add("butterfly", r, c, 1);
     for (let r = 3; r <= 4; r++) for (let c = 0; c <= 9; c++) add("bee", r, c, 1);
   }
@@ -248,10 +248,10 @@
   }
 
   // --- Difficulty curve (stage ramp x selected difficulty) ----------------------
-  function diveInterval() { return Math.max(0.8, 2.2 - (stage - 1) * 0.2) * DP.diveIntervalMul; }
-  function maxDivers() { return Math.max(1, Math.min(4, 1 + Math.floor(stage / 2)) + DP.maxDiversBonus); }
-  function diverSpeed() { return Math.min(700, 330 + stage * 15) * DP.diverSpeedMul; }
-  function bulletSpeed() { return Math.min(500, 240 + stage * 12) * DP.bulletSpeedMul; }
+  function diveInterval() { return Math.max(0.65, 2.0 - (stage - 1) * 0.2) * DP.diveIntervalMul; }
+  function maxDivers() { return Math.max(1, Math.min(5, 2 + Math.floor(stage / 2)) + DP.maxDiversBonus); }
+  function diverSpeed() { return Math.min(760, 360 + stage * 18) * DP.diverSpeedMul; }
+  function bulletSpeed() { return Math.min(540, 260 + stage * 14) * DP.bulletSpeedMul; }
   function entrySpeed() { return Math.min(560, 320 + stage * 10); }
 
   // --- HUD ----------------------------------------------------------------------
@@ -547,26 +547,32 @@
     e.state = "diving";
     e.path = Paths.dive(e.x, e.y, player.x, W(), H());
     e.s = 0;
-    e.speed = diverSpeed();
+    // Per-dive speed variation: some enemies streak in noticeably faster.
+    e.speed = diverSpeed() * rand(0.9, 1.3);
     e.shots = 1 + Math.floor(rand(0, 2) + stage * 0.1);
-    if (e.shots > 3) e.shots = 3;
+    if (e.shots > 4) e.shots = 4;
     e.fireT = 0.15;
     e.offX = 0;
     // Assign a shot personality for this dive.
     const r = Math.random();
     if (e.kind === "bee") {
-      e.shotKind = r < 0.60 ? "aimed" : r < 0.85 ? "scatter" : "snipe";
+      if (r < 0.45) e.shotKind = "aimed";
+      else if (r < 0.70) e.shotKind = "scatter";
+      else if (r < 0.88) e.shotKind = "snipe";
+      else e.shotKind = "twin";
     } else {
-      // Butterfly: normal aim, rapid burst, or scatter volley.
-      if (r < 0.45) {
+      // Butterfly: aim, rapid burst, scatter volley, or snipe.
+      if (r < 0.35) {
         e.shotKind = "aimed";
-      } else if (r < 0.80) {
+      } else if (r < 0.65) {
         e.shotKind = "aimed";
         e.shots = Math.max(2, e.shots);
         e.fireT = 0.09; // rapid burst
-      } else {
+      } else if (r < 0.85) {
         e.shotKind = "scatter";
-        e.shots = 1;
+        e.shots = Math.min(2, e.shots);
+      } else {
+        e.shotKind = "snipe";
       }
     }
     GameAudio.dive();
@@ -579,13 +585,13 @@
       ? Paths.bossDive(e.x, e.y, player.x, W(), H())
       : Paths.dive(e.x, e.y, player.x, W(), H());
     e.s = 0;
-    e.speed = diverSpeed() * 0.9;
-    e.shots = beam ? 0 : 2;
+    e.speed = diverSpeed() * rand(0.85, 1.1);
+    e.shots = beam ? 0 : 3;
     e.fireT = 0.2;
     e.offX = 0;
     if (!beam) {
       const r = Math.random();
-      e.shotKind = r < 0.35 ? "triple" : r < 0.65 ? "heavy" : "aimed";
+      e.shotKind = r < 0.30 ? "triple" : r < 0.55 ? "heavy" : r < 0.75 ? "twin" : "aimed";
     }
     GameAudio.dive();
     if (!beam) {
@@ -628,6 +634,11 @@
 
     if (kind === "scatter") {
       fanned([-0.22, 0, 0.22], 0.9, 0.85);
+    } else if (kind === "twin") {
+      // Two parallel bullets offset perpendicular to the aim direction.
+      const off = 9 * SCALE;
+      bullets.push({ x: e.x - ny * off, y: e.y + nx * off, vx: nx * sp, vy: Math.max(80, ny * sp), phase: rand(0, 6), bsc: 0.9 });
+      bullets.push({ x: e.x + ny * off, y: e.y - nx * off, vx: nx * sp, vy: Math.max(80, ny * sp), phase: rand(0, 6), bsc: 0.9 });
     } else if (kind === "snipe") {
       pushBullet(nx * sp * 1.75, ny * sp * 1.75, 0.6);
     } else if (kind === "triple") {
@@ -987,9 +998,9 @@
       if (divers < maxDivers()) {
         const pool = enemies.filter((e) => e.alive && e.state === "formation");
         if (pool.length) {
-          // Weighted pick: bees most often, bosses rarely.
+          // Weighted pick: bees most often, but bosses dive far more than before.
           const r = Math.random();
-          let kind = r < 0.5 ? "bee" : r < 0.85 ? "butterfly" : "boss";
+          let kind = r < 0.45 ? "bee" : r < 0.75 ? "butterfly" : "boss";
           let cands = pool.filter((e) => e.kind === kind);
           if (!cands.length) cands = pool;
           const e = cands[(Math.random() * cands.length) | 0];
