@@ -174,12 +174,13 @@
   const form = { cell: 30, rowH: 28, topY: 90 };
 
   function computeMetrics() {
-    // Scale sprites proportionally to viewport area; clamped so they stay
-    // readable on the smallest phone and don't go absurd on a 4K desktop.
-    SCALE = Math.max(0.88, Math.min(1.6, Math.sqrt(W() * H() / (390 * 844))));
+    // Scale sprites proportionally to viewport area. Reference is a small phone
+    // (280×600) so that a modern iPhone (~390×844) gets ~1.4× and sprites are
+    // large enough to read clearly on a handheld screen.
+    SCALE = Math.max(1.0, Math.min(2.0, Math.sqrt(W() * H() / (280 * 600))));
     PLAYER_R = Math.round(12 * SCALE);
     DUAL_GAP  = Math.round(24 * SCALE);
-    form.cell = Math.min(Math.round(34 * SCALE), Math.floor(W() / 11.5));
+    form.cell = Math.min(Math.round(34 * SCALE), Math.floor(W() / 10.5));
     form.rowH = Math.round(form.cell * 0.95);
     form.topY = Math.round(H() * 0.10) + Math.round(26 * SCALE);
     player.y  = H() - Math.max(Math.round(86 * SCALE), H() * 0.11);
