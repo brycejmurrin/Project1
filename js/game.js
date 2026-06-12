@@ -316,6 +316,7 @@
   function goAttract() {
     state = ST.ATTRACT;
     stateT = 0;
+    Zones.set(1, false);
     stageEl.innerHTML = "&nbsp;";
     hideOverlay();
     Menu.show({
@@ -370,6 +371,7 @@
   function goIntro() {
     state = ST.INTRO;
     stateT = 1.6;
+    Zones.set(stage, isChallengeStage());
     updateStageLabel();
     missiles = [];
     bullets = [];
@@ -1214,6 +1216,7 @@
   // --- Master update ----------------------------------------------------------------
   function update(dt) {
     formT += dt;
+    Zones.update(dt);
     const starSpeed = state === ST.ATTRACT ? 60 : 110;
     for (const s of stars) {
       s.y += starSpeed * (0.2 + s.depth * 0.6) * dt;
@@ -1314,13 +1317,16 @@
 
   // --- Render --------------------------------------------------------------------
   function render() {
-    Renderer.clear(0.02, 0.024, 0.06);
+    const zc = Zones.clearColor();
+    Renderer.clear(zc[0], zc[1], zc[2]);
     if (shakeT > 0) {
       const m = 12 * (shakeT / 0.5);
       Renderer.setOffset(rand(-m, m), rand(-m, m));
     } else {
       Renderer.setOffset(0, 0);
     }
+
+    Zones.draw(W(), H());
 
     for (const s of stars) {
       const a = (0.25 + s.depth * 0.55) * (0.7 + 0.3 * Math.sin(s.tw));
@@ -1572,6 +1578,7 @@
     Renderer.resize();
     computeMetrics();
     initStars();
+    Zones.resize();
   });
 
   // --- Boot ------------------------------------------------------------------------
