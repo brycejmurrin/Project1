@@ -336,6 +336,165 @@ const Sprites = (function () {
   }
 
   // ---------------------------------------------------------------------
+  // 3d. Javelin "Lancer" (~20px at scale 1) — sleek white/cyan needle,
+  //     fast charge-diver with tight twin shots.
+  // ---------------------------------------------------------------------
+  function javelin(x, y, scale, angle, wingPhase) {
+    if (scale === undefined) scale = 1;
+    angle = angle || 0;
+    wingPhase = wingPhase || 0;
+    const a = angle, sc = scale;
+    const flick = Math.sin(wingPhase * 2.2); // rapid engine flicker
+
+    const CYAN = [0.3, 0.88, 1, 1];
+    const HULL = [0.92, 0.97, 1, 1];
+
+    // Cyan glow halo, elongated to feel fast.
+    part(x, y, a, sc, 0, 0, 18, 28, 0, [0.3, 0.9, 1, 0.14]);
+
+    // Long thin fuselage with a needle nose.
+    part(x, y, a, sc, 0, 1, 3.2, 16, 0, HULL);
+    triPart(x, y, a, sc, 0, -11, -1.8, -7, 1.8, -7, HULL);
+
+    // Swept tri fins near the tail.
+    triPart(x, y, a, sc, -1.4, 3, -7, 9.5, -1.4, 9.5, CYAN);
+    triPart(x, y, a, sc, 1.4, 3, 7, 9.5, 1.4, 9.5, CYAN);
+    // Fin highlights.
+    triPart(x, y, a, sc, -1.4, 5.5, -4.5, 9, -1.4, 9, [1, 1, 1, 0.55]);
+    triPart(x, y, a, sc, 1.4, 5.5, 4.5, 9, 1.4, 9, [1, 1, 1, 0.55]);
+
+    // Bright core line down the spine.
+    part(x, y, a, sc, 0, 0, 1.1, 16, 0, [0.8, 1, 1, 0.85]);
+
+    // Cyan canopy dot.
+    part(x, y, a, sc, 0, -4, 2, 2.6, 0, CYAN);
+
+    // Flickering engine spike at the tail.
+    part(x, y, a, sc, 0, 9.8, 2.2, 3 + 1.2 * flick, 0, [0.35, 0.9, 1, 0.6]);
+  }
+
+  // ---------------------------------------------------------------------
+  // 3e. Tanker "Bulwark" (~26px wide at scale 1) — squat armored bruiser;
+  //     grey-green plates tint toward rust-red when damaged.
+  // ---------------------------------------------------------------------
+  function tanker(x, y, scale, angle, wingPhase, damaged) {
+    if (scale === undefined) scale = 1;
+    angle = angle || 0;
+    wingPhase = wingPhase || 0;
+    const a = angle, sc = scale;
+    const bob = 0.6 * Math.sin(wingPhase * 0.7); // slow heavy sway
+
+    const plate = damaged ? [0.72, 0.38, 0.28, 1] : [0.52, 0.6, 0.46, 1];
+    const plateDark = damaged ? [0.5, 0.24, 0.18, 1] : [0.36, 0.43, 0.33, 1];
+    const band = [0.14, 0.17, 0.13, 1];
+
+    // Dim glow halo.
+    part(x, y, a, sc, 0, 0, 38, 26, 0,
+      damaged ? [1, 0.4, 0.25, 0.12] : [0.6, 0.85, 0.5, 0.10]);
+
+    // Wide base hull, then overlapping armor plates stacked on top.
+    part(x, y, a, sc, 0, 0.5, 25, 13, 0, plateDark);
+    part(x, y, a, sc, 0, -3, 21, 7, 0, plate);
+    part(x, y, a, sc, 0, 3.5, 17, 6.5, 0, plate);
+    part(x, y, a, sc, -8.5, 0.5, 7, 10, 0.14, plate);
+    part(x, y, a, sc, 8.5, 0.5, 7, 10, -0.14, plate);
+
+    // Dark segmentation bands across the hull.
+    part(x, y, a, sc, 0, -0.3, 23, 1.6, 0, band);
+    part(x, y, a, sc, 0, 5.8, 14, 1.6, 0, band);
+
+    // Two stubby side cannons, bobbing slightly out of phase.
+    part(x, y, a, sc, -11.8, -2 + bob, 3, 7.5, 0, plateDark);
+    part(x, y, a, sc, 11.8, -2 - bob, 3, 7.5, 0, plateDark);
+    part(x, y, a, sc, -11.8, -6.2 + bob, 1.8, 2, 0, band); // muzzles
+    part(x, y, a, sc, 11.8, -6.2 - bob, 1.8, 2, 0, band);
+
+    // Dim yellow cockpit slit.
+    part(x, y, a, sc, 0, -4.6, 8, 1.8, 0, [0.85, 0.74, 0.25, 0.85]);
+  }
+
+  // ---------------------------------------------------------------------
+  // 3f. Cascade "Centipede" (~24px at scale 1) — gold segmented body that
+  //     rains rhythmic bullet volleys.
+  // ---------------------------------------------------------------------
+  function cascade(x, y, scale, angle, wingPhase) {
+    if (scale === undefined) scale = 1;
+    angle = angle || 0;
+    wingPhase = wingPhase || 0;
+    const a = angle, sc = scale;
+    const wig = Math.sin(wingPhase);
+
+    const GOLD = [1, 0.78, 0.22, 1];
+    const GOLD_DEEP = [0.85, 0.58, 0.12, 1];
+
+    // Amber glow halo.
+    part(x, y, a, sc, 0, 0, 24, 30, 0, [1, 0.7, 0.2, 0.13]);
+
+    // Head wedge.
+    triPart(x, y, a, sc, 0, -13, -3.4, -8, 3.4, -8, GOLD);
+    // Eyes.
+    part(x, y, a, sc, -1.6, -9.5, 1.4, 1.6, 0, [0.25, 0.12, 0.02, 1]);
+    part(x, y, a, sc, 1.6, -9.5, 1.4, 1.6, 0, [0.25, 0.12, 0.02, 1]);
+
+    // Stacked segments shrinking toward the tail, wiggling alternately.
+    const segs = [
+      [-6, 9.5, GOLD],
+      [-1.5, 8, GOLD_DEEP],
+      [2.5, 6.5, GOLD],
+      [6, 5, GOLD_DEEP],
+      [9, 3.6, GOLD],
+    ];
+    for (let i = 0; i < segs.length; i++) {
+      const ly = segs[i][0], w = segs[i][1];
+      const tw = 0.16 * wig * (i % 2 ? 1 : -1);
+      part(x, y, a, sc, 0, ly, w, w * 0.85, tw, segs[i][2]);
+    }
+
+    // White accent rings between segments.
+    part(x, y, a, sc, 0, -3.8, 8, 1.2, 0, [1, 1, 1, 0.8]);
+    part(x, y, a, sc, 0, 0.5, 6.8, 1.2, 0, [1, 1, 1, 0.8]);
+    part(x, y, a, sc, 0, 4.4, 5.2, 1.1, 0, [1, 1, 1, 0.8]);
+    part(x, y, a, sc, 0, 7.6, 4, 1, 0, [1, 1, 1, 0.7]);
+  }
+
+  // ---------------------------------------------------------------------
+  // 3g. Siren "Choir" (~24px at scale 1) — pale pink support enemy that
+  //     conducts formation-wide volleys; radiating faint rings.
+  // ---------------------------------------------------------------------
+  function siren(x, y, scale, angle, wingPhase) {
+    if (scale === undefined) scale = 1;
+    angle = angle || 0;
+    wingPhase = wingPhase || 0;
+    const a = angle, sc = scale;
+    const flap = Math.sin(wingPhase * 0.9);
+
+    const PINK = [1, 0.74, 0.88, 1];
+    const PALE = [1, 0.93, 0.97, 1];
+
+    // Radiating concentric faint rings, slowly counter-rotating.
+    part(x, y, a, sc, 0, 0, 30, 30, wingPhase * 0.3, [1, 0.5, 0.85, 0.15]);
+    part(x, y, a, sc, 0, 0, 22, 22, -wingPhase * 0.45, [1, 0.6, 0.9, 0.15]);
+    part(x, y, a, sc, 0, 0, 14, 14, wingPhase * 0.6, [1, 0.7, 0.95, 0.15]);
+
+    // Two arced wing quads sweeping out and up.
+    const wAng = 0.8 + 0.25 * flap;
+    part(x, y, a, sc, -7, -1, 4.5, 13, -wAng, PINK);
+    part(x, y, a, sc, 7, -1, 4.5, 13, wAng, PINK);
+    // Pale outer feather edges.
+    part(x, y, a, sc, -8.8, -4, 3, 8, -wAng - 0.4, [1, 1, 1, 0.7]);
+    part(x, y, a, sc, 8.8, -4, 3, 8, wAng + 0.4, [1, 1, 1, 0.7]);
+
+    // Slim elegant body.
+    part(x, y, a, sc, 0, 0.5, 3.5, 15, 0, PALE);
+    triPart(x, y, a, sc, 0, -11, -2.2, -7, 2.2, -7, PALE);
+    triPart(x, y, a, sc, -1.8, 8, 1.8, 8, 0, 12.5, PINK); // tapered tail
+
+    // Bright magenta core.
+    part(x, y, a, sc, 0, -2, 3, 3.6, 0, [1, 0.15, 0.7, 1]);
+    part(x, y, a, sc, 0, -2, 1.4, 1.8, 0, [1, 0.85, 0.95, 0.9]);
+  }
+
+  // ---------------------------------------------------------------------
   // 4. Boss Galaga (~28px at scale 1) — bulky; green, or purple when hit.
   // ---------------------------------------------------------------------
   function boss(x, y, scale, angle, wingPhase, damaged) {
@@ -521,6 +680,10 @@ const Sprites = (function () {
     butterfly,
     wasp,
     moth,
+    javelin,
+    tanker,
+    cascade,
+    siren,
     boss,
     playerMissile,
     enemyBullet,

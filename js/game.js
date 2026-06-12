@@ -107,6 +107,8 @@
   let wavePath = null;
   let diveT = 2;
   let formT = 0;
+  let sirenT = 6;        // countdown to the siren-led formation volley
+  let sirenWarn = false; // final-second telegraph flag
 
   // Challenge stage bookkeeping
   let chWave = 0;
@@ -234,19 +236,30 @@
         x: 0, y: -60, angle: 0,
         fromX: 0, fromY: 0, fromAngle: 0, slotT: 0,
         wingPhase: rand(0, 6),
-        fireT: 0, shots: 0,
+        fireT: 0, shots: 0, burstN: 0,
         beamT: 0, beamDive: false, offX: 0,
         captured: false,
         alive: true,
       });
     }
     for (let c = 2; c <= 7; c++) add("boss", 0, c, 2);
+    // Armored tankers fill the empty top-row corners from stage 5.
+    if (stage >= 5) {
+      add("tanker", 0, 0, 3);
+      add("tanker", 0, 9, 3);
+    }
     for (let r = 1; r <= 2; r++) for (let c = 1; c <= 8; c++) {
+      // A single siren joins the formation from stage 8.
+      if (stage >= 8 && r === 1 && c === 4) { add("siren", r, c, 2); continue; }
+      // Cascades replace the center row-2 butterflies from stage 6.
+      if (stage >= 6 && r === 2 && (c === 4 || c === 5)) { add("cascade", r, c, 2); continue; }
       // Outer columns become tanky moths from stage 3.
       const isMoth = stage >= 3 && (c === 1 || c === 8);
       add(isMoth ? "moth" : "butterfly", r, c, isMoth ? 2 : 1);
     }
     for (let r = 3; r <= 4; r++) for (let c = 0; c <= 9; c++) {
+      // The four center bees become charge-diving javelins from stage 4.
+      if (stage >= 4 && (c === 4 || c === 5)) { add("javelin", r, c, 2); continue; }
       // Outer columns become fast wasps from stage 2.
       const isWasp = stage >= 2 && (c <= 1 || c >= 8);
       add(isWasp ? "wasp" : "bee", r, c, 1);
@@ -254,9 +267,12 @@
   }
 
   function enemyRadius(e) {
-    const r = e.kind === "boss" ? 16
+    const r = e.kind === "tanker" ? 17
+      : e.kind === "boss" ? 16
       : e.kind === "moth" ? 15
       : e.kind === "butterfly" ? 14
+      : e.kind === "siren" ? 14
+      : e.kind === "javelin" ? 12
       : e.kind === "wasp" ? 11
       : 13;
     return Math.round(r * SCALE);
@@ -267,7 +283,11 @@
     if (e.kind === "bee") return flying ? 100 : 50;
     if (e.kind === "wasp") return flying ? 150 : 70;
     if (e.kind === "butterfly") return flying ? 160 : 80;
+    if (e.kind === "javelin") return flying ? 200 : 90;
+    if (e.kind === "cascade") return flying ? 220 : 100;
     if (e.kind === "moth") return flying ? 250 : 120;
+    if (e.kind === "siren") return flying ? 300 : 150;
+    if (e.kind === "tanker") return flying ? 350 : 180;
     return flying ? 400 : 150;
   }
 
@@ -396,6 +416,8 @@
     spawnIdx = 0;
     spawnT = 0.2;
     wavePath = Paths.entry(0, W(), H());
+    sirenT = 6;
+    sirenWarn = false;
     state = ST.ENTRY;
     stateT = 0;
   }
@@ -603,6 +625,27 @@
       e.shots = 2;
       e.fireT = 0.3;
       e.shotKind = r < 0.65 ? "ring" : "scatter";
+    } else if (e.kind === "javelin") {
+      // Javelins charge in hard and fast with tight twin shots.
+      e.speed = diverSpeed() * rand(1.3, 1.6);
+      e.shots = 2;
+      e.shotKind = "narrow";
+    } else if (e.kind === "tanker") {
+      // Tankers lumber down lobbing heavy rounds.
+      e.speed = diverSpeed() * rand(0.65, 0.8);
+      e.shots = 2;
+      e.fireT = 0.4;
+      e.shotKind = "heavy";
+    } else if (e.kind === "cascade") {
+      // Cascades rain rhythmic 3-shot volleys straight down.
+      e.speed = diverSpeed() * rand(0.85, 1.0);
+      e.shotKind = "cascade";
+      e.shots = 6;
+      e.burstN = 0;
+      e.fireT = 0.3;
+    } else if (e.kind === "siren") {
+      // Sirens dive rarely and only take simple aimed shots.
+      e.shotKind = "aimed";
     } else if (e.kind === "bee") {
       if (r < 0.45) e.shotKind = "aimed";
       else if (r < 0.70) e.shotKind = "scatter";
@@ -662,13 +705,13 @@
     }
   }
 
-  function fireEnemyBullet(e) {
+  function fireEnemyBullet(e, kindOverride) {
     const dx = player.x - e.x;
     const dy = player.y - e.y;
     const len = Math.max(1, Math.hypot(dx, dy));
     const sp = bulletSpeed();
     const nx = dx / len, ny = dy / len;
-    const kind = e.shotKind || "aimed";
+    const kind = kindOverride || e.shotKind || "aimed";
 
     function pushBullet(vx, vy, bsc) {
       bullets.push({ x: e.x, y: e.y, vx, vy: Math.max(80, vy), phase: rand(0, 6), bsc: bsc || 1 });
@@ -696,6 +739,12 @@
       fanned([-0.30, 0, 0.30], 1.0, 0.85);
     } else if (kind === "heavy") {
       pushBullet(nx * sp * 0.55 + rand(-10, 10), ny * sp * 0.55, 1.7);
+    } else if (kind === "narrow") {
+      // Two quick, tight bullets — the javelin's signature.
+      fanned([-0.08, 0.08], 1.25, 0.7);
+    } else if (kind === "cascade") {
+      // One bullet straight down; the cadence makes the pattern.
+      pushBullet(0, sp * 0.95, 0.9);
     } else {
       pushBullet(nx * sp + rand(-30, 30), ny * sp, 1);
     }
@@ -751,13 +800,10 @@
     bullets = [];
     for (const e of enemies) {
       if (!e.alive || e.state === "wait") continue;
-      if (e.kind === "boss") {
-        e.hp--;
-        if (e.hp <= 0) killEnemy(e, true);
-        else GameAudio.enemyHit();
-      } else {
-        killEnemy(e, true);
-      }
+      // Generic multi-hp handling: tough enemies soak one hit.
+      e.hp--;
+      if (e.hp <= 0) killEnemy(e, true);
+      else GameAudio.enemyHit();
     }
   }
 
@@ -944,7 +990,13 @@
           if (e.fireT <= 0) {
             fireEnemyBullet(e);
             e.shots--;
-            e.fireT = rand(0.3, 0.6);
+            if (e.shotKind === "cascade") {
+              // Bursts of 3 quick shots with a pause between bursts.
+              e.burstN = (e.burstN || 0) + 1;
+              e.fireT = (e.burstN % 3 === 0) ? 0.55 : 0.12;
+            } else {
+              e.fireT = rand(0.3, 0.6);
+            }
           }
         }
         if (done) {
@@ -1033,6 +1085,32 @@
   }
 
   function updateCombat(dt) {
+    // Siren support: while any siren holds formation, a global timer ticks
+    // toward a formation-wide volley, telegraphed for the final second.
+    let sirenAlive = false;
+    for (const e of enemies) {
+      if (e.alive && e.kind === "siren" && e.state === "formation") {
+        sirenAlive = true;
+        break;
+      }
+    }
+    if (sirenAlive) {
+      sirenT -= dt;
+      sirenWarn = sirenT <= 1.0;
+      if (sirenT <= 0) {
+        const volley = enemies.filter((e) => e.alive && e.state === "formation");
+        const n = Math.min(5, volley.length);
+        for (let i = 0; i < n; i++) {
+          const idx = (Math.random() * volley.length) | 0;
+          fireEnemyBullet(volley.splice(idx, 1)[0], "aimed");
+        }
+        sirenT = 6;
+        sirenWarn = false;
+      }
+    } else {
+      sirenWarn = false;
+    }
+
     diveT -= dt;
     if (diveT <= 0) {
       diveT = diveInterval();
@@ -1043,12 +1121,15 @@
       if (divers < maxDivers()) {
         const pool = enemies.filter((e) => e.alive && e.state === "formation");
         if (pool.length) {
-          // Weighted pick across all five kinds; falls back to any if absent.
+          // Weighted pick across the kinds; falls back to any if absent.
           const r = Math.random();
-          let kind = r < 0.30 ? "bee"
-            : r < 0.45 ? "wasp"
-            : r < 0.65 ? "butterfly"
-            : r < 0.75 ? "moth"
+          let kind = r < 0.25 ? "bee"
+            : r < 0.38 ? "wasp"
+            : r < 0.55 ? "butterfly"
+            : r < 0.65 ? "moth"
+            : r < 0.75 ? "javelin"
+            : r < 0.83 ? "cascade"
+            : r < 0.90 ? "tanker"
             : "boss";
           let cands = pool.filter((e) => e.kind === kind);
           if (!cands.length) cands = pool;
@@ -1066,7 +1147,7 @@
   }
 
   function updateChallenge(dt) {
-    const kinds = ["bee", "wasp", "butterfly", "moth", "boss"];
+    const kinds = ["bee", "wasp", "javelin", "moth", "boss"];
     if (chWave < 5) {
       if (chSpawnIdx < 8) {
         chSpawnT -= dt;
@@ -1351,6 +1432,30 @@
       else if (e.kind === "wasp") Sprites.wasp(e.x, e.y, SCALE, e.angle, e.wingPhase);
       else if (e.kind === "butterfly") Sprites.butterfly(e.x, e.y, SCALE, e.angle, e.wingPhase);
       else if (e.kind === "moth") Sprites.moth(e.x, e.y, SCALE, e.angle, e.wingPhase);
+      else if (e.kind === "javelin") Sprites.javelin(e.x, e.y, SCALE, e.angle, e.wingPhase);
+      else if (e.kind === "tanker") Sprites.tanker(e.x, e.y, SCALE, e.angle, e.wingPhase, e.hp <= 1);
+      else if (e.kind === "cascade") Sprites.cascade(e.x, e.y, SCALE, e.angle, e.wingPhase);
+      else if (e.kind === "siren") {
+        Sprites.siren(e.x, e.y, SCALE, e.angle, e.wingPhase);
+        // Volley telegraph: pulsing pink ring expanding over the final second.
+        if (sirenWarn && e.state === "formation") {
+          const wt = clamp(1 - sirenT, 0, 1);
+          const ringR = (16 + wt * 26) * SCALE;
+          const pulse = 0.5 + 0.5 * Math.sin(formT * 16);
+          const alpha = (0.25 + 0.45 * pulse) * (1 - wt * 0.55);
+          const segs = 12;
+          const segLen = (Math.PI * 2 * ringR) / segs * 1.1;
+          for (let i = 0; i < segs; i++) {
+            const ang = (i / segs) * Math.PI * 2;
+            Renderer.rotQuad(
+              e.x + Math.sin(ang) * ringR,
+              e.y - Math.cos(ang) * ringR,
+              2 * SCALE, segLen, ang + Math.PI / 2,
+              [1, 0.4, 0.8, alpha]
+            );
+          }
+        }
+      }
       else Sprites.boss(e.x, e.y, SCALE, e.angle, e.wingPhase, e.hp <= 1);
       if (e.captured) {
         const rPulse = 0.55 + 0.45 * Math.sin(formT * 8);
