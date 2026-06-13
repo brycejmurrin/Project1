@@ -549,6 +549,54 @@ const Sprites = (function () {
   }
 
   // ---------------------------------------------------------------------
+  // 5b. WAVE cannon: expanding teal-green shockwave ring of radius r.
+  //     t drives a slow shimmer rotation of the ring segments.
+  // ---------------------------------------------------------------------
+  function playerWave(x, y, r, t) {
+    t = t || 0;
+    const segs = 12;
+    const segLen = (Math.PI * 2 * r) / segs * 1.08;
+    const thick = Math.max(2, r * 0.07);
+
+    // Inner soft glow disc.
+    Renderer.rotQuad(x, y, r * 1.25, r * 1.25, Math.PI / 4 + t * 0.6, [0.2, 0.95, 0.55, 0.07]);
+
+    // Ring of short tangential segments, shimmering with t.
+    for (let i = 0; i < segs; i++) {
+      const ang = (i / segs) * Math.PI * 2 + t * 1.6;
+      const cx = x + Math.sin(ang) * r;
+      const cy = y - Math.cos(ang) * r;
+      Renderer.rotQuad(cx, cy, thick, segLen, ang + Math.PI / 2, [0.24, 0.94, 0.54, 0.5]);
+    }
+
+    // Leading bright arc across the top of the ring.
+    for (let i = -2; i <= 2; i++) {
+      const ang = (i / segs) * Math.PI * 2 * 0.6;
+      const cx = x + Math.sin(ang) * r;
+      const cy = y - Math.cos(ang) * r;
+      Renderer.rotQuad(cx, cy, thick * 0.7, segLen * 0.8, ang + Math.PI / 2,
+        [0.75, 1, 0.88, 0.85]);
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // 5c. LANCE bolt: long white-hot piercing beam (~26px) with cyan edges.
+  // ---------------------------------------------------------------------
+  function playerLance(x, y, sc) {
+    sc = sc || 1;
+    // Soft glow halo.
+    Renderer.rotQuad(x, y, 9 * sc, 32 * sc, 0, [0.3, 0.85, 1, 0.16]);
+    // Cyan edge rails.
+    Renderer.rotQuad(x - 2.2 * sc, y + 2 * sc, 1.3 * sc, 20 * sc, 0, [0.35, 0.9, 1, 0.8]);
+    Renderer.rotQuad(x + 2.2 * sc, y + 2 * sc, 1.3 * sc, 20 * sc, 0, [0.35, 0.9, 1, 0.8]);
+    // Long white-hot bolt body with a pointed tip.
+    Renderer.rotQuad(x, y, 2.6 * sc, 26 * sc, 0, WHITE);
+    Renderer.tri(x, y - 17 * sc, x - 2 * sc, y - 12 * sc, x + 2 * sc, y - 12 * sc, WHITE);
+    // Bright core line.
+    Renderer.rotQuad(x, y, 1.1 * sc, 22 * sc, 0, [0.9, 1, 1, 0.9]);
+  }
+
+  // ---------------------------------------------------------------------
   // 6. Enemy bullet: small red/yellow projectile (~6px), pulsing.
   // ---------------------------------------------------------------------
   function enemyBullet(x, y, phase, sc) {
@@ -686,6 +734,8 @@ const Sprites = (function () {
     siren,
     boss,
     playerMissile,
+    playerWave,
+    playerLance,
     enemyBullet,
     explosion,
     tractorBeam,

@@ -148,9 +148,10 @@
   let musicPref = true;
   try { musicPref = localStorage.getItem(MUSIC_KEY) !== "off"; } catch (e) { /* ok */ }
 
-  let powerups = []; // {x, y, type, t}  "spread" | "rapid" | "multi" | "bomb"
+  let powerups = []; // {x, y, type, t}  "spread" | "rapid" | "multi" | "wave" | "lance" | "bomb" | "chrono"
   let weaponType = "normal";
   let weaponAmmo = 0;
+  let chronoT = 0; // enemy slow-motion timer (CHRONO pickup)
   let shakeT = 0;
   let killStreak = 0;
   let comboCount = 0;
@@ -241,6 +242,13 @@
         captured: false,
         alive: true,
       });
+    }
+    if (isBossRush()) {
+      // Boss rush: a wall of elite enemies and nothing else.
+      for (let c = 1; c <= 8; c++) add("boss", 0, c, 3);
+      for (let c = 3; c <= 6; c++) add("tanker", 1, c, 3);
+      for (let c = 2; c <= 7; c++) add("javelin", 2, c, 2);
+      return;
     }
     for (let c = 2; c <= 7; c++) add("boss", 0, c, 2);
     // Armored tankers fill the empty top-row corners from stage 5.
@@ -381,12 +389,13 @@
     nextExtra = DP.extraLifeFirst;
     player.ships = 1;
     weaponType = "normal"; weaponAmmo = 0; powerups = []; updateWeaponHud();
-    killStreak = 0; comboCount = 0; comboTimer = 0;
+    killStreak = 0; comboCount = 0; comboTimer = 0; chronoT = 0;
     GameAudio.coin();
     goIntro();
   }
 
-  function isChallengeStage() { return stage % 3 === 0; }
+  function isBossRush() { return stage % 10 === 0; }
+  function isChallengeStage() { return stage % 3 === 0 && !isBossRush(); }
 
   function goIntro() {
     state = ST.INTRO;
@@ -404,7 +413,9 @@
     syncMusic();
     GameAudio.stageIntro();
     showOverlay(
-      isChallengeStage() ? "CHALLENGING STAGE" : "STAGE " + stage,
+      isBossRush() ? "BOSS RUSH"
+        : isChallengeStage() ? "CHALLENGING STAGE"
+        : "STAGE " + stage,
       "", "", false
     );
   }
@@ -443,6 +454,12 @@
   function goClear() {
     state = ST.CLEAR;
     stateT = 1.5;
+    if (isBossRush()) {
+      const bonus = Math.round(5000 * DP.scoreMul);
+      addScore(bonus);
+      Fx.popup(W() / 2, H() * 0.4, bonus, [0.4, 1, 0.7, 1]);
+      Fx.flash(1);
+    }
   }
 
   function retreatDivers() {
@@ -535,7 +552,7 @@
     GameAudio.playerExplode();
     shakeT = 0.5;
     weaponType = "normal"; weaponAmmo = 0; powerups = []; updateWeaponHud();
-    killStreak = 0; comboCount = 0; comboTimer = 0;
+    killStreak = 0; comboCount = 0; comboTimer = 0; chronoT = 0;
     player.alive = false;
     retreatDivers();
     state = ST.DYING;
@@ -771,12 +788,16 @@
       killStreak++;
       let drop = null;
       // One streak milestone: 12 rapid kills → weapon or bomb, then reset.
-      if (comboCount === 12) {
-        drop = Math.random() < 0.25 ? "bomb" : pickRandom(["spread", "rapid", "multi"]);
-        comboCount = 0;
+      const milestone = comboCount >= 12;
+      if (milestone) comboCount = 0;
+      if (e.kind === "tanker") {
+        // Rare elite: tankers bypass combo logic with their own drop pool.
+        if (Math.random() < 0.45) drop = pickRandom(["wave", "lance", "chrono"]);
+      } else if (milestone) {
+        drop = Math.random() < 0.25 ? "bomb" : pickRandom(["spread", "rapid", "multi", "lance"]);
       } else if (e.kind === "boss" && Math.random() < 0.08) {
-        // Rare boss drop — only source of drops outside the streak milestone.
-        drop = pickRandom(["spread", "multi"]);
+        // Rare boss drop — only other source of drops outside the milestone.
+        drop = pickRandom(["spread", "multi", "wave"]);
       }
       if (drop && powerups.length < 2) {
         powerups.push({ x: e.x, y: e.y, type: drop, t: 0 });
@@ -832,7 +853,9 @@
   }
 
   function currentFireInterval() {
-    return weaponType === "rapid" ? FIRE_INTERVAL_RAPID : FIRE_INTERVAL;
+    return weaponType === "rapid" ? FIRE_INTERVAL_RAPID
+      : weaponType === "wave" ? 0.5
+      : FIRE_INTERVAL;
   }
 
   function updateWeaponHud() {
@@ -840,14 +863,26 @@
       weaponHudEl.hidden = true;
     } else {
       weaponHudEl.hidden = false;
-      const label = weaponType === "rapid" ? "RAPID" : weaponType === "multi" ? "MULTI" : "SPREAD";
+      const label = weaponType === "rapid" ? "RAPID"
+        : weaponType === "multi" ? "MULTI"
+        : weaponType === "wave" ? "WAVE"
+        : weaponType === "lance" ? "LANCE"
+        : "SPREAD";
       weaponHudEl.textContent = label + " ×" + weaponAmmo;
-      const color = weaponType === "rapid" ? "#35e0e0" : weaponType === "multi" ? "#ff55cc" : "#f0b429";
+      const color = weaponType === "rapid" ? "#35e0e0"
+        : weaponType === "multi" ? "#ff55cc"
+        : weaponType === "wave" ? "#3ef08a"
+        : weaponType === "lance" ? "#eaf6ff"
+        : "#f0b429";
       const shadow = weaponType === "rapid"
         ? "0 0 8px rgba(53,224,224,0.8)"
         : weaponType === "multi"
           ? "0 0 8px rgba(255,85,204,0.8)"
-          : "0 0 8px rgba(240,180,41,0.8)";
+          : weaponType === "wave"
+            ? "0 0 8px rgba(62,240,138,0.8)"
+            : weaponType === "lance"
+              ? "0 0 8px rgba(234,246,255,0.8)"
+              : "0 0 8px rgba(240,180,41,0.8)";
       weaponHudEl.style.color = color;
       weaponHudEl.style.textShadow = shadow;
     }
@@ -889,6 +924,38 @@
       return;
     }
 
+    if (weaponType === "wave") {
+      // One expanding shockwave from the formation center.
+      missiles.push({
+        x: player.x, y: muzzleY,
+        vx: 0, vy: -240,
+        wave: true, r: 10 * SCALE, t: 0, hitSet: new Set(),
+      });
+      GameAudio.shoot();
+      if (--weaponAmmo <= 0) { weaponType = "normal"; weaponAmmo = 0; }
+      updateWeaponHud();
+      return;
+    }
+
+    if (weaponType === "lance") {
+      // One piercing bolt per ship, capped so a big formation can't spam.
+      const cap = player.ships * 2 + 2;
+      let fired = false;
+      for (const off of offs) {
+        if (missiles.length >= cap) break;
+        missiles.push({
+          x: player.x + off, y: muzzleY,
+          vx: 0, vy: -900,
+          lance: true, pierce: 3, lastHit: null,
+        });
+        fired = true;
+      }
+      if (fired) GameAudio.shoot();
+      if (--weaponAmmo <= 0) { weaponType = "normal"; weaponAmmo = 0; }
+      updateWeaponHud();
+      return;
+    }
+
     const rapidMod = weaponType === "rapid";
     // Per-ship missile budget; extra headroom once you've stacked a formation.
     const cap = player.ships * (rapidMod ? 4 : 2) + (player.ships > 1 ? 2 : 0);
@@ -908,6 +975,13 @@
       const m = missiles[i];
       m.x += (m.vx || 0) * dt;
       m.y += m.vy !== undefined ? m.vy * dt : -760 * dt;
+      if (m.wave) {
+        m.t += dt;
+        const maxR = 120 * SCALE;
+        m.r = Math.min(maxR, m.r + 340 * SCALE * dt);
+        if (m.y < -maxR) missiles.splice(i, 1);
+        continue;
+      }
       if (m.y < -20 || m.x < -20 || m.x > W() + 20) missiles.splice(i, 1);
     }
   }
@@ -1201,10 +1275,62 @@
   }
 
   // --- Collisions ---------------------------------------------------------------
+  // Apply one hit of missile damage to an enemy (shared by all weapon types).
+  function damageEnemy(e) {
+    e.hp--;
+    if (e.hp <= 0) {
+      if (state === ST.CHALLENGE) {
+        e.alive = false;
+        explosions.push({ x: e.x, y: e.y, t: 0, big: false });
+        GameAudio.enemyExplode(e.kind);
+        const chPts = Math.round(100 * DP.scoreMul);
+        addScore(chPts);
+        Fx.popup(e.x, e.y, chPts);
+        chHits++;
+        chWaveHits++;
+      } else {
+        killEnemy(e);
+      }
+    } else {
+      GameAudio.enemyHit(); // soaked one
+    }
+  }
+
   function collide() {
     // Missiles vs enemies.
     for (let i = missiles.length - 1; i >= 0; i--) {
       const m = missiles[i];
+
+      if (m.wave) {
+        // Shockwave sweeps everything inside its growing radius once each.
+        for (const e of enemies) {
+          if (!e.alive || e.state === "wait") continue;
+          if (captureBoss === e) continue;
+          if (m.hitSet.has(e)) continue;
+          if (Math.hypot(m.x - e.x, m.y - e.y) < m.r + enemyRadius(e)) {
+            m.hitSet.add(e);
+            damageEnemy(e);
+          }
+        }
+        continue; // never consumed by a hit
+      }
+
+      if (m.lance) {
+        // Piercing bolt punches through up to `pierce` distinct enemies.
+        for (const e of enemies) {
+          if (!e.alive || e.state === "wait") continue;
+          if (captureBoss === e) continue;
+          if (e === m.lastHit) continue;
+          const r = enemyRadius(e);
+          if (Math.abs(m.x - e.x) < r && Math.abs(m.y - e.y) < r + 4) {
+            m.lastHit = e;
+            damageEnemy(e);
+            if (--m.pierce <= 0) { missiles.splice(i, 1); break; }
+          }
+        }
+        continue;
+      }
+
       let hit = false;
       for (const e of enemies) {
         if (!e.alive || e.state === "wait") continue;
@@ -1212,23 +1338,7 @@
         const r = enemyRadius(e);
         if (Math.abs(m.x - e.x) < r && Math.abs(m.y - e.y) < r + 4) {
           hit = true;
-          e.hp--;
-          if (e.hp <= 0) {
-            if (state === ST.CHALLENGE) {
-              e.alive = false;
-              explosions.push({ x: e.x, y: e.y, t: 0, big: false });
-              GameAudio.enemyExplode(e.kind);
-              const chPts = Math.round(100 * DP.scoreMul);
-              addScore(chPts);
-              Fx.popup(e.x, e.y, chPts);
-              chHits++;
-              chWaveHits++;
-            } else {
-              killEnemy(e);
-            }
-          } else {
-            GameAudio.enemyHit(); // boss soaked one
-          }
+          damageEnemy(e);
           break;
         }
       }
@@ -1281,9 +1391,16 @@
       if (player.alive && Math.hypot(p.x - player.x, p.y - player.y) < 22 * SCALE) {
         if (p.type === "bomb") {
           activateBomb();
+        } else if (p.type === "chrono") {
+          chronoT = 4;
+          Fx.flash(0.8);
         } else {
           weaponType = p.type;
-          weaponAmmo = p.type === "rapid" ? 80 : p.type === "multi" ? 20 : 25;
+          weaponAmmo = p.type === "rapid" ? 80
+            : p.type === "multi" ? 20
+            : p.type === "wave" ? 8
+            : p.type === "lance" ? 30
+            : 25;
           Fx.flash(0.5);
           updateWeaponHud();
         }
@@ -1327,14 +1444,18 @@
       case ST.ENTRY:
       case ST.COMBAT:
       case ST.CHALLENGE: {
+        // CHRONO slows the enemy side (bullets, enemies, spawns) to 45%;
+        // the player, their shots and pickups always run at real time.
+        const edt = chronoT > 0 ? dt * 0.45 : dt;
+        if (chronoT > 0) chronoT -= dt;
         updatePlayer(dt);
         updateMissiles(dt);
-        updateBullets(dt);
+        updateBullets(edt);
         updateFreedShips(dt);
-        for (const e of enemies) if (e.alive) updateEnemy(e, dt);
-        if (state === ST.ENTRY) updateEntry(dt);
-        else if (state === ST.COMBAT) updateCombat(dt);
-        else updateChallenge(dt);
+        for (const e of enemies) if (e.alive) updateEnemy(e, edt);
+        if (state === ST.ENTRY) updateEntry(edt);
+        else if (state === ST.COMBAT) updateCombat(edt);
+        else updateChallenge(edt);
         collide();
         updatePowerups(dt);
         if (comboTimer > 0) { comboTimer -= dt; if (comboTimer <= 0) comboCount = 0; }
@@ -1468,16 +1589,26 @@
     if (lostShip) Sprites.player(lostShip.x, lostShip.y, 0.7 * SCALE, Math.PI);
 
     for (const b of bullets) Sprites.enemyBullet(b.x, b.y, b.phase, (b.bsc || 1) * SCALE);
-    for (const m of missiles) Sprites.playerMissile(m.x, m.y, SCALE);
+    for (const m of missiles) {
+      if (m.wave) Sprites.playerWave(m.x, m.y, m.r, m.t);
+      else if (m.lance) Sprites.playerLance(m.x, m.y, SCALE);
+      else Sprites.playerMissile(m.x, m.y, SCALE);
+    }
     for (const p of powerups) {
       const pulse = 0.8 + 0.2 * Math.sin(p.t * 9);
       const color = p.type === "rapid"
         ? [0.25, 0.88, 1, pulse]
         : p.type === "multi"
           ? [1, 0.3, 0.85, pulse]
-          : p.type === "bomb"
-            ? [1, 0.45, 0.1, pulse]
-            : [1, 0.75, 0.12, pulse]; // spread = gold
+          : p.type === "wave"
+            ? [0.2, 0.95, 0.55, pulse]
+            : p.type === "lance"
+              ? [1, 1, 1, pulse]
+              : p.type === "chrono"
+                ? [0.3, 0.45, 1, pulse]
+                : p.type === "bomb"
+                  ? [1, 0.45, 0.1, pulse]
+                  : [1, 0.75, 0.12, pulse]; // spread = gold
       Renderer.rotQuad(p.x, p.y, 13 * SCALE, 13 * SCALE, p.t * 3, color);
       Renderer.rotQuad(p.x, p.y, 7 * SCALE, 7 * SCALE, -p.t * 5, [1, 1, 1, pulse * 0.6]);
     }
@@ -1495,6 +1626,12 @@
 
     for (const ex of explosions) Sprites.explosion(ex.x, ex.y, ex.t, ex.big);
     Fx.draw();
+
+    // CHRONO slow-mo: cool blue wash over the field, fading out at the end.
+    if (chronoT > 0) {
+      const a = 0.05 * Math.min(1, chronoT / 0.8);
+      Renderer.quad(0, 0, W(), H(), [0.2, 0.35, 1, a]);
+    }
 
     // Bottom HUD: reserve lives and stage flags.
     if (state !== ST.ATTRACT) {
@@ -1551,7 +1688,7 @@
     explosions = [];
     powerups = [];
     weaponType = "normal"; weaponAmmo = 0; updateWeaponHud();
-    killStreak = 0; comboCount = 0; comboTimer = 0;
+    killStreak = 0; comboCount = 0; comboTimer = 0; chronoT = 0;
     rescueShip = null;
     lostShip = null;
     captureBoss = null;
